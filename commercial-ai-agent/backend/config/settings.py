@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     GROQ_FAST_MODEL: str = "qwen/qwen3.8-27b"
     GROQ_REASONING_EFFORT: str = "high"
     GROQ_JSON_REASONING_EFFORT: str = "none"
-    GROQ_MAX_COMPLETION_TOKENS: int = 2048
+    GROQ_MAX_COMPLETION_TOKENS: int = 800
     
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
@@ -68,7 +68,7 @@ settings = Settings(
     GROQ_FAST_MODEL=os.getenv("GROQ_FAST_MODEL", "qwen/qwen3.8-27b"),
     GROQ_REASONING_EFFORT=os.getenv("GROQ_REASONING_EFFORT", "high"),
     GROQ_JSON_REASONING_EFFORT=os.getenv("GROQ_JSON_REASONING_EFFORT", "none"),
-    GROQ_MAX_COMPLETION_TOKENS=int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "2048")),
+    GROQ_MAX_COMPLETION_TOKENS=int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "800")),
     GENERAL_MODEL=os.getenv("GENERAL_MODEL", "gemma4:12b-mlx"),
     HEAVY_MODEL=os.getenv("HEAVY_MODEL", "gemma4:12b-mlx"),
     REASONING_MODEL=os.getenv("REASONING_MODEL", "gemma4:12b-mlx"),
