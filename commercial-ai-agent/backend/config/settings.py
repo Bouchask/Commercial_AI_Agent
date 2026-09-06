@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Production Groq models; the developer/free tier remains rate-limited.
     GROQ_MODEL: str = "qwen/qwen3.8-27b"
     GROQ_FAST_MODEL: str = "qwen/qwen3.8-27b"
-    GROQ_REASONING_EFFORT: str = "high"
+    GROQ_REASONING_EFFORT: str = "none"
     GROQ_JSON_REASONING_EFFORT: str = "none"
     GROQ_MAX_COMPLETION_TOKENS: int = 800
     
@@ -66,7 +66,7 @@ settings = Settings(
     GROQ_API_KEY=os.getenv("GROQ_API_KEY", None),
     GROQ_MODEL=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
     GROQ_FAST_MODEL=os.getenv("GROQ_FAST_MODEL", "qwen/qwen3.8-27b"),
-    GROQ_REASONING_EFFORT=os.getenv("GROQ_REASONING_EFFORT", "high"),
+    GROQ_REASONING_EFFORT=os.getenv("GROQ_REASONING_EFFORT", "none"),
     GROQ_JSON_REASONING_EFFORT=os.getenv("GROQ_JSON_REASONING_EFFORT", "none"),
     GROQ_MAX_COMPLETION_TOKENS=int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "800")),
     GENERAL_MODEL=os.getenv("GENERAL_MODEL", "gemma4:12b-mlx"),
