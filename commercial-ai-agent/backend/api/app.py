@@ -354,6 +354,7 @@ def create_app():
     @app.route("/api/conversations", methods=["GET"])
     @jwt_required
     def get_conversations():
+        from backend.models.execution import Execution
         db = SessionLocal()
         try:
             executions = db.query(Execution).filter(
@@ -371,6 +372,7 @@ def create_app():
     @app.route("/api/conversations/<thread_id>/history", methods=["GET"])
     @jwt_required
     def get_conversation_history(thread_id):
+        from backend.models.execution import Execution
         db = SessionLocal()
         try:
             execution = db.get(Execution, thread_id)
