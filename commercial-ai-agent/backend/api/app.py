@@ -62,6 +62,33 @@ def create_app():
     ):
         register_tools()
 
+    # Apply auto-migrations on startup for serverless environments
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            # SQLite doesn't natively support ADD COLUMN IF NOT EXISTS in all versions, 
+            # but postgres does. Catching exceptions ensures it doesn't break if it exists.
+            try:
+                if "sqlite" in str(engine.url):
+                    conn.execute(text("ALTER TABLE executions ADD COLUMN title VARCHAR"))
+                else:
+                    conn.execute(text("ALTER TABLE executions ADD COLUMN IF NOT EXISTS title VARCHAR"))
+            except Exception:
+                pass
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id SERIAL PRIMARY KEY,
+                    execution_id VARCHAR NOT NULL,
+                    role VARCHAR NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_execution_id ON messages (execution_id)"))
+    except Exception as e:
+        logger.error(f"Auto-migration error: {e}")
+
     # Dashboard API blueprint (clients, services, quotes, invoices)
     from backend.api.dashboard import bp as dashboard_bp
     app.register_blueprint(dashboard_bp)
