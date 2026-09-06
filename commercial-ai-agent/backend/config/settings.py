@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     ALLOW_DEBUGGER: bool = False
-    ALLOW_ONLINE_LATEX: bool = False
+    ALLOW_ONLINE_LATEX: bool = True
     DATABASE_POOL_SIZE: int = 2
     DATABASE_MAX_OVERFLOW: int = 1
     DATABASE_POOL_TIMEOUT: int = 10
