@@ -6,6 +6,7 @@ from backend.execution.state_machine import ExecutionState, StateMachine
 from backend.mcp.client import MCPClient
 from backend.mcp.registry import registry
 from backend.mcp.schemas import ToolResult, ToolSchema
+from backend.mcp.schemas import ToolInputValidationError, validate_tool_arguments
 from backend.mcp.utils.tools import calculate
 from backend.mcp.utils.tools import prepare_quote_items
 
@@ -37,6 +38,18 @@ class MCPBoundaryTests(unittest.TestCase):
         self.assertEqual(calculate("(12 + 3) * 2")["result"], 30.0)
         with self.assertRaisesRegex(RuntimeError, "Only numeric arithmetic"):
             calculate("__import__('os').system('echo unsafe')")
+
+    def test_schema_validator_enforces_bounds_before_tool_execution(self):
+        schema = {
+            "type": "object",
+            "properties": {"discount": {"type": "number", "minimum": 0, "maximum": 1}},
+            "required": ["discount"],
+            "additionalProperties": False,
+        }
+        with self.assertRaisesRegex(ToolInputValidationError, "at most"):
+            validate_tool_arguments({"discount": 1.5}, schema)
+        with self.assertRaisesRegex(ToolInputValidationError, "Unsupported"):
+            validate_tool_arguments({"discount": 0.2, "unexpected": True}, schema)
 
     def test_quote_item_aliases_resolve_to_catalogue_codes(self):
         catalogue = [

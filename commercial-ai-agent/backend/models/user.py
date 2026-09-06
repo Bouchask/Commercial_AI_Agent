@@ -6,7 +6,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    # Kept for compatibility with the original production users table.
+    name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    # Legacy schema compatibility; password auth uses hashed_password.
+    password = Column(String, nullable=True)
     hashed_password = Column(String, nullable=True)  # Nullable for Google auth users
     
     # Google OAuth fields

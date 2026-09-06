@@ -3,17 +3,29 @@ from sqlalchemy.orm import sessionmaker
 from backend.config.settings import settings
 import os
 
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import QueuePool, NullPool
 
 # Allow overriding DATABASE_URL for local testing
 database_url = os.environ.get('DATABASE_URL', settings.DATABASE_URL)
 
+if database_url and database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
 engine_kwargs = {
     "pool_pre_ping": True,
-    "pool_size": 5,
-    "max_overflow": 10,
-    "pool_timeout": 30
+    "pool_size": settings.DATABASE_POOL_SIZE,
+    "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+    "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
+    "pool_recycle": 300,
 }
+
+# Serverless instances are short lived and database providers frequently cap
+# concurrent connections. Keeping sockets in each warm instance exhausts that
+# cap; checkout-per-request is safer here.
+if os.environ.get("VERCEL") == "1" and not database_url.startswith("sqlite"):
+    engine_kwargs["poolclass"] = NullPool
+    for key in ("pool_size", "max_overflow", "pool_timeout", "pool_recycle"):
+        engine_kwargs.pop(key, None)
 
 if database_url.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}

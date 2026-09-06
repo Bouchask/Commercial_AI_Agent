@@ -3,11 +3,14 @@ LLM Model Router with intelligent capability-based model selection and error han
 """
 import logging
 import time
+import inspect
+import requests
 from typing import Dict, Any, Optional, List
 from backend.config.settings import settings
 from backend.llm.base import LLMProvider
 from backend.llm.ollama import OllamaProvider
 from backend.llm.openrouter import OpenRouterProvider
+from backend.llm.groq_provider import GroqProvider
 from backend.exceptions import LLMError, TimeoutError as AgentTimeoutError, RetryableError, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -28,9 +31,14 @@ class ModelRouter:
         if primary_provider:
             self.provider = primary_provider
             self.backup_provider = None
+        elif settings.LLM_PROVIDER == "groq" and settings.GROQ_API_KEY:
+            self.provider = GroqProvider()
+            import os
+            self.backup_provider = OllamaProvider() if not os.environ.get("VERCEL") else None
         elif settings.OPENROUTER_API_KEY:
             self.provider = OpenRouterProvider()
-            self.backup_provider = OllamaProvider()  # Fallback
+            import os
+            self.backup_provider = OllamaProvider() if not os.environ.get("VERCEL") else None
         else:
             self.provider = OllamaProvider()
             self.backup_provider = None
@@ -51,7 +59,7 @@ class ModelRouter:
         self.max_retries = 3
         self.retry_delay_sec = 1.0
 
-    def get_model(self, capability: str) -> str:
+    def get_model(self, capability: str, provider: Optional[LLMProvider] = None) -> str:
         """
         Get the specific model string for a given capability.
         
@@ -61,6 +69,14 @@ class ModelRouter:
         Returns:
             Model name string
         """
+        # Use the larger model for reasoning and the smaller model for cheap,
+        # low-latency extraction.
+        active_provider = provider or self.provider
+        if isinstance(active_provider, GroqProvider):
+            if capability == "simple_extraction":
+                return settings.GROQ_FAST_MODEL
+            return settings.GROQ_MODEL
+            
         if capability in self.capability_map:
             return self.capability_map[capability]
         # Fallback to general model if capability not explicitly mapped
@@ -79,18 +95,30 @@ class ModelRouter:
             Method result
         """
         last_error = None
-        
-        import inspect
+        providers = [self.provider]
+        if self.backup_provider is not None and self.backup_provider is not self.provider:
+            providers.append(self.backup_provider)
+
         for attempt in range(self.max_retries):
+            # Only try backup provider on the final attempt if it exists
+            if attempt == self.max_retries - 1 and len(providers) > 1:
+                provider = providers[1]
+            else:
+                provider = providers[0]
+                
+            call_kwargs = dict(kwargs)
+            capability = call_kwargs.pop("_capability", None)
+            if capability:
+                call_kwargs["model"] = self.get_model(capability, provider)
             try:
                 # Get method from provider
-                method = getattr(self.provider, method_name)
+                method = getattr(provider, method_name)
 
                 # Only add timeout if the provider method accepts it
                 try:
                     sig = inspect.signature(method)
                     if 'timeout' in sig.parameters:
-                        kwargs['timeout'] = self.timeout_sec
+                        call_kwargs['timeout'] = self.timeout_sec
                 except (ValueError, TypeError):
                     # If signature can't be inspected, fall back to not injecting timeout
                     pass
@@ -101,12 +129,12 @@ class ModelRouter:
                 )
                 
                 # Call method
-                result = method(**kwargs)
+                result = method(**call_kwargs)
                 
                 logger.debug(f"Successfully called {method_name}")
                 return result
             
-            except TimeoutError as e:
+            except (TimeoutError, requests.exceptions.Timeout) as e:
                 last_error = e
                 logger.warning(
                     f"LLM call timed out (attempt {attempt + 1})",
@@ -130,12 +158,8 @@ class ModelRouter:
                     extra={"extra_fields": {"attempt": attempt + 1, "error": str(e)}}
                 )
                 
-                # Try backup provider if available
-                if attempt == 0 and self.backup_provider:
-                    logger.info("Attempting fallback provider")
-                    original_provider = self.provider
-                    self.provider = self.backup_provider
-                    continue
+                if attempt == 0 and len(providers) > 1:
+                    logger.info("Primary LLM provider failed; trying fallback provider")
                 
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay_sec * (2 ** attempt))
@@ -143,8 +167,8 @@ class ModelRouter:
                     raise LLMError(
                         message=f"LLM request failed after {self.max_retries} attempts: {str(e)}",
                         error_code=ErrorCode.LLM_UNAVAILABLE,
-                        model=kwargs.get("model"),
-                        provider=type(self.provider).__name__,
+                        model=call_kwargs.get("model"),
+                        provider=type(provider).__name__,
                         original_error=e
                     )
         
@@ -153,6 +177,11 @@ class ModelRouter:
             message="LLM request failed for unknown reason",
             error_code=ErrorCode.LLM_UNAVAILABLE
         )
+
+    def _call_capability(self, method_name: str, capability: str, **kwargs) -> Any:
+        """Call a capability and keep model selection aligned with fallback providers."""
+        kwargs["_capability"] = capability
+        return self._call_with_retry(method_name, **kwargs)
 
     def generate(self, capability: str, prompt: str, system_prompt: Optional[str] = None) -> str:
         """
@@ -166,11 +195,10 @@ class ModelRouter:
         Returns:
             Generated text
         """
-        model = self.get_model(capability)
-        return self._call_with_retry(
+        return self._call_capability(
             "generate",
+            capability,
             prompt=prompt,
-            model=model,
             system_prompt=system_prompt
         )
 
@@ -188,10 +216,10 @@ class ModelRouter:
         """
         model = self.get_model(capability)
         try:
-            result = self._call_with_retry(
+            result = self._call_capability(
                 "generate_json",
+                capability,
                 prompt=prompt,
-                model=model,
                 system_prompt=system_prompt
             )
             
@@ -227,11 +255,10 @@ class ModelRouter:
         Returns:
             Response with tool calls
         """
-        model = self.get_model(capability)
-        return self._call_with_retry(
+        return self._call_capability(
             "generate_with_tools",
+            capability,
             prompt=prompt,
-            model=model,
             tools=tools,
             system_prompt=system_prompt
         )
@@ -249,11 +276,10 @@ class ModelRouter:
         Returns:
             Analysis result
         """
-        model = self.get_model(capability)
-        return self._call_with_retry(
+        return self._call_capability(
             "analyze_image",
+            capability,
             prompt=prompt,
             image_path=image_path,
-            model=model,
             system_prompt=system_prompt
         )

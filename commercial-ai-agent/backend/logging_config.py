@@ -123,8 +123,8 @@ def setup_logging(app_env: str = "development", log_file: Optional[str] = None) 
         root_logger.addHandler(file_handler)
     
     # Suppress verbose library logs
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("requests").setLevel(logging.WARNING)
+    for noisy_logger in ("urllib3", "requests", "openai", "httpx", "httpcore", "httpx2", "httpcore2", "asyncio"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
     logging.getLogger("flask").setLevel(logging.INFO)
 
 

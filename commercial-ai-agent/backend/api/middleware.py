@@ -235,6 +235,15 @@ class ErrorHandler:
             }
             return jsonify(response), 503
 
+        @app.errorhandler(413)
+        def handle_request_too_large(error):
+            response = {
+                "error": "REQUEST_TOO_LARGE",
+                "message": "The request body is too large",
+                "request_id": g.get("correlation_id")
+            }
+            return jsonify(response), 413
+
 
 def setup_middleware(app: Flask) -> None:
     """

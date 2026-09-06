@@ -50,6 +50,18 @@ class ProcessRequest(BaseModel):
         }
 
 
+class ChatRequest(BaseModel):
+    """Authenticated conversational request accepted by the dashboard."""
+    prompt: str = Field(..., min_length=1, max_length=5000)
+    thread_id: Optional[str] = Field(None, min_length=1, max_length=128)
+
+    @validator("prompt")
+    def validate_prompt(cls, value):
+        if not value.strip():
+            raise ValueError("Prompt cannot be empty or whitespace only")
+        return value.strip()
+
+
 class ApproveRequest(BaseModel):
     """Step approval request model."""
     execution_id: str = Field(

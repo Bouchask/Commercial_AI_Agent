@@ -88,9 +88,13 @@ def generate_document(
     try:
         if resolved_client_id is None:
             raise ValueError("A generated document must be linked to an existing client.")
+        with open(pdf_path, "rb") as f:
+            file_content = f.read()
+            
         document = Document(
             filename=os.path.basename(pdf_path),
             filepath=pdf_path,
+            content=file_content,
             document_type=document_type,
             reference_id=int(reference_id) if reference_id is not None else None,
             client_id=resolved_client_id,
@@ -178,9 +182,13 @@ def generate_excel_document(
     try:
         if resolved_client_id is None:
             raise ValueError("A generated document must be linked to an existing client.")
+        with open(excel_path, "rb") as f:
+            file_content = f.read()
+            
         document = Document(
             filename=os.path.basename(excel_path),
             filepath=excel_path,
+            content=file_content,
             document_type=document_type,
             reference_id=int(reference_id) if reference_id is not None else None,
             client_id=resolved_client_id,

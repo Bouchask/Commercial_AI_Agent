@@ -19,6 +19,9 @@ def append_row(
         
         # Determine which spreadsheet_id to use
         current_user = getattr(request, 'current_user', None)
+        if (current_user and current_user.default_spreadsheet_id and spreadsheet_id
+                and spreadsheet_id != current_user.default_spreadsheet_id):
+            raise ValueError("Only the authenticated user's default spreadsheet may be modified.")
         
         if not spreadsheet_id:
             if not current_user:

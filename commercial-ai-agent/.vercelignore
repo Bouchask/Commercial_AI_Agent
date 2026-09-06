@@ -1,0 +1,6 @@
+backend/venv
+frontend/node_modules
+.venv
+commercial.db
+commercial.db-shm
+commercial.db-wal

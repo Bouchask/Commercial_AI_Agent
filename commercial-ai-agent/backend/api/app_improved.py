@@ -10,6 +10,7 @@ from flask_limiter.util import get_remote_address
 import jwt
 import datetime
 from werkzeug.security import check_password_hash
+from sqlalchemy import text
 
 from backend.agents.langgraph_orchestrator import LangGraphOrchestrator
 from backend.config.settings import cors_origins, settings
@@ -17,7 +18,7 @@ from backend.api.auth import jwt_required
 from backend.api.middleware import setup_middleware, RequestValidator
 from backend.database.connection import SessionLocal
 from backend.models.user import User
-from backend.schemas import (
+from backend.api_schemas import (
     LoginRequest, ProcessRequest, ApproveRequest,
     ExecutionStatusRequest, ProcessResponse, ApproveResponse,
     HealthCheckResponse, LoginResponse, ErrorResponse
@@ -98,7 +99,7 @@ def create_app(log_file: str = None):
             # Check database
             db = SessionLocal()
             try:
-                db.execute("SELECT 1")
+                db.execute(text("SELECT 1"))
                 db_status = "connected"
             except:
                 db_status = "disconnected"

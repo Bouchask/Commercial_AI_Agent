@@ -42,7 +42,7 @@ const RECENT_CHATS = [
 /* ═══════════════════════════════════════════════════════
    SIDEBAR — MD3 Navigation Drawer
    ═══════════════════════════════════════════════════════ */
-function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadsheetId }) {
+function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadsheetId, conversations, activeThreadId, onSelectConversation }) {
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col bg-md-surface-container p-3 transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)] md:static md:translate-x-0 ${
@@ -115,12 +115,21 @@ function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadshee
         {/* Recent Chats */}
         <div className="sidebar-label mt-5">Récentes</div>
         <div className="mt-1 space-y-1">
-          {RECENT_CHATS.map((chat, index) => (
-            <button key={chat} className={`sidebar-chat ${index === 0 ? "sidebar-chat-active" : ""}`}>
+          {conversations.map((chat) => (
+            <button 
+              key={chat.id} 
+              onClick={() => { onSelectConversation(chat.id); if (window.innerWidth < 768) onClose(); }}
+              className={`sidebar-chat ${chat.id === activeThreadId ? "sidebar-chat-active" : ""}`}
+            >
               <Bot className="size-4 shrink-0" />
-              <span className="truncate">{chat}</span>
+              <span className="truncate">{chat.title || "Discussion"}</span>
             </button>
           ))}
+          {conversations.length === 0 && (
+            <div className="text-xs text-md-on-surface-variant/60 px-3 py-2">
+              Aucune discussion
+            </div>
+          )}
         </div>
       </div>
 
@@ -677,6 +686,49 @@ export default function Dashboard({ user, onLogout }) {
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [activeView, setActiveView] = useState('chat');
   const [spreadsheetId, setSpreadsheetId] = useState(null);
+  const [conversations, setConversations] = useState([]);
+
+  const fetchConversations = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/api/conversations`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.ok) {
+        setConversations(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch conversations:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchConversations();
+  }, []);
+
+  const loadConversation = async (id) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/api/conversations/${id}/history`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.ok) {
+        const history = await res.json();
+        const loadedMessages = history.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+        setMessages(loadedMessages.length > 0 ? loadedMessages : [WELCOME_MESSAGE]);
+        setThreadId(id);
+        setActiveView('chat');
+      }
+    } catch (err) {
+      console.error("Failed to load conversation history:", err);
+      toast.error("Impossible de charger l'historique de la discussion");
+    }
+  };
 
   useEffect(() => {
     const fetchSpreadsheetId = async () => {
@@ -805,9 +857,11 @@ export default function Dashboard({ user, onLogout }) {
     try {
       appendResult(await requestApi("/api/chat", { prompt: text, thread_id: threadId }), nextMessages);
     } catch (error) {
-      setMessages([...nextMessages, { role: "agent", content: `> Erreur de connexion à l'API : ${error.message}` }]);
+      setMessages([...nextMessages, { role: "agent", content: `Erreur: ${error.message}` }]);
     } finally {
       setIsTyping(false);
+      // Refresh the conversations list to update the title if it's a new conversation
+      fetchConversations();
     }
   };
 
@@ -822,9 +876,22 @@ export default function Dashboard({ user, onLogout }) {
 
   return (
     <main className="flex h-[100dvh] overflow-hidden bg-md-background text-md-on-surface">
-      <Toaster richColors position="bottom-right" />
-      {isSidebarOpen && <button className="fixed inset-0 z-30 bg-md-on-surface/25 md:hidden backdrop-blur-sm transition-all" onClick={() => setSidebarOpen(false)} aria-label="Fermer le menu" />}
-      <Sidebar open={isSidebarOpen} onClose={() => setSidebarOpen(false)} onNewChat={startNewChat} user={user} onLogout={onLogout} setView={setActiveView} spreadsheetId={spreadsheetId} />
+      <Toaster richColors />      {/* Mobile Backdrop */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm transition-opacity md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      <Sidebar 
+        open={isSidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+        onNewChat={startNewChat} 
+        user={user} 
+        onLogout={onLogout} 
+        setView={setActiveView} 
+        spreadsheetId={spreadsheetId}
+        conversations={conversations}
+        activeThreadId={threadId}
+        onSelectConversation={loadConversation}
+      />
 
       <section className="relative flex min-w-0 flex-1 flex-col">
         {/* ── Header ── */}

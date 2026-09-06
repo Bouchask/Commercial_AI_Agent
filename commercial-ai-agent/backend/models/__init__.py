@@ -6,7 +6,7 @@ from backend.models.proposal import Proposal, ProposalItem
 from backend.models.quote import Quote, QuoteItem
 from backend.models.invoice import Invoice, InvoiceItem
 from backend.models.document import Document, Template
-from backend.models.execution import Execution, ToolCall
+from backend.models.execution import Execution, ToolCall, Message
 from backend.models.audit_log import AuditLog
 from backend.models.assignment import Assignment
 
@@ -27,6 +27,7 @@ __all__ = [
     "Template",
     "Execution",
     "ToolCall",
+    "Message",
     "AuditLog",
     "Assignment"
 ]

@@ -27,6 +27,9 @@ class AgentState(TypedDict):
     final_response: str
     execution_state: str
 
+from psycopg_pool import ConnectionPool
+from langgraph.checkpoint.postgres import PostgresSaver
+
 class LangGraphOrchestrator:
     def __init__(self):
         self.router = ModelRouter()
@@ -36,15 +39,42 @@ class LangGraphOrchestrator:
         self.mcp_client = MCPClient()
         self.executor = ExecutionEngine(self.mcp_client)
         
-        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
-        self.checkpointer = SqliteSaver(self.conn)
-        self.checkpointer.setup()
+        db_path = settings.DATABASE_URL
+        if db_path.startswith("sqlite"):
+            self.pool = None
+            import sqlite3
+            from langgraph.checkpoint.sqlite import SqliteSaver
+            self.conn = sqlite3.connect(db_path.replace("sqlite:///", ""), check_same_thread=False)
+            self.checkpointer = SqliteSaver(self.conn)
+            self.checkpointer.setup()
+        else:
+            self.conn = None
+            # Extract psycopg compatible string
+            psycopg_url = db_path
+            if psycopg_url.startswith("postgresql+psycopg://"):
+                psycopg_url = psycopg_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            elif psycopg_url.startswith("postgresql+psycopg2://"):
+                psycopg_url = psycopg_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+                
+            # Keep this separate checkpoint pool deliberately tiny.  The API
+            # also uses SQLAlchemy and hosted Postgres plans cap connections.
+            self.pool = ConnectionPool(
+                conninfo=psycopg_url,
+                min_size=0,
+                max_size=settings.LANGGRAPH_POOL_SIZE,
+                max_idle=30,
+                kwargs={"autocommit": True},
+            )
+            self.checkpointer = PostgresSaver(self.pool)
+            self.checkpointer.setup()
+            
         self.graph = self._build_graph()
 
     def __del__(self):
-        if hasattr(self, 'conn'):
+        if hasattr(self, 'conn') and self.conn:
             self.conn.close()
+        if hasattr(self, 'pool') and self.pool:
+            self.pool.close()
 
     def _build_graph(self):
         workflow = StateGraph(AgentState)
@@ -90,10 +120,23 @@ class LangGraphOrchestrator:
         previous_context = ""
         results = state.get("results", {})
         if results:
-            previous_context = "Here is what was accomplished in previous steps of this conversation:\n"
+            context_lines = []
             for step_id, res in results.items():
                 if res.get("success"):
-                    previous_context += f"- Step {step_id}: {res.get('data', {})}\n"
+                    data = res.get('data', {})
+                    try:
+                        import json
+                        data_str = json.dumps(data)
+                        if len(data_str) > 500:
+                            data_str = '{"status": "success", "note": "Data omitted due to length"}'
+                    except Exception:
+                        data_str = '{"status": "success"}'
+                    context_lines.append(f"- Step {step_id}: {data_str}")
+            
+            # Keep only the last 5 steps to save tokens
+            if len(context_lines) > 5:
+                context_lines = context_lines[-5:]
+            previous_context = "Here is what was accomplished recently:\n" + "\n".join(context_lines) + "\n"
                     
         user_info = ""
         try:
@@ -119,10 +162,23 @@ class LangGraphOrchestrator:
         next_step_id = 1
         if results:
             next_step_id = max(results.keys()) + 1
-            previous_context = "Here is what was accomplished in previous steps of this conversation:\n"
+            context_lines = []
             for step_id, res in results.items():
                 if res.get("success"):
-                    previous_context += f"- Step {step_id}: {res.get('data', {})}\n"
+                    data = res.get('data', {})
+                    try:
+                        import json
+                        data_str = json.dumps(data)
+                        if len(data_str) > 500:
+                            data_str = '{"status": "success", "note": "Data omitted due to length"}'
+                    except Exception:
+                        data_str = '{"status": "success"}'
+                    context_lines.append(f"- Step {step_id}: {data_str}")
+            
+            # Keep only the last 5 steps to save tokens
+            if len(context_lines) > 5:
+                context_lines = context_lines[-5:]
+            previous_context = "Here is what was accomplished recently:\n" + "\n".join(context_lines) + "\n"
                     
         plan = self.planner.plan(state["intent"], available_tools, previous_context, next_step_id, state["user_input"])
         state["plan"] = plan
@@ -177,8 +233,61 @@ class LangGraphOrchestrator:
         state["final_response"] = final
         return state
 
-    def process_request(self, user_input: str, thread_id: str = None) -> Dict[str, Any]:
+    def _assert_execution_owner(self, execution_id: str, user_id: int, create: bool = False) -> None:
+        """Persist and enforce the owner of every resumable LangGraph thread."""
+        from backend.database.connection import SessionLocal
+        from backend.models.execution import Execution
+        db = SessionLocal()
+        try:
+            execution = db.get(Execution, execution_id)
+            if execution is None:
+                if create:
+                    db.add(Execution(id=execution_id, user_id=user_id, state="RECEIVED"))
+                    db.commit()
+                    return
+                raise PermissionError("Execution not found")
+            
+            if execution.user_id is None:
+                execution.user_id = user_id
+                db.commit()
+                return
+                
+            if execution.user_id != user_id:
+                raise PermissionError("Execution not found")
+        finally:
+            db.close()
+
+    def process_request(self, user_input: str, thread_id: str = None, user_id: int = None) -> Dict[str, Any]:
+        if user_id is None:
+            raise PermissionError("Authenticated user is required")
         execution_id = thread_id or str(uuid.uuid4())
+        # Client-side thread IDs may predate the ownership table (or be
+        # generated by the UI before the first request). Claim only genuinely
+        # missing IDs; an existing ID owned by another user is still rejected.
+        self._assert_execution_owner(execution_id, user_id, create=True)
+        
+        from backend.database.connection import SessionLocal
+        from backend.models.execution import Execution, Message
+        import threading
+        
+        db = SessionLocal()
+        try:
+            execution = db.get(Execution, execution_id)
+            # Generate title if missing
+            if execution and not execution.title:
+                system_prompt = "Tu es un assistant qui génère un titre ultra court (2 à 5 mots max) pour résumer l'intention de l'utilisateur. Réponds uniquement avec le titre, sans guillemets ni fioritures. Langue: français."
+                try:
+                    title = self.router.generate(capability="fast", prompt=user_input, system_prompt=system_prompt)
+                    execution.title = title.strip()
+                except Exception as e:
+                    execution.title = "Nouvelle discussion"
+            
+            # Save user message
+            db.add(Message(execution_id=execution_id, role="user", content=user_input))
+            db.commit()
+        finally:
+            db.close()
+            
         config = {"configurable": {"thread_id": execution_id}}
         
         # Explicitly wipe the intent and plan from the state before invoking, 
@@ -197,9 +306,23 @@ class LangGraphOrchestrator:
         }
         
         result_state = self.graph.invoke(initial_state, config)
+        
+        # Save agent response
+        final_response = result_state.get("final_response")
+        if final_response:
+            db = SessionLocal()
+            try:
+                db.add(Message(execution_id=execution_id, role="agent", content=final_response))
+                db.commit()
+            finally:
+                db.close()
+                
         return self._format_response(result_state, execution_id)
 
-    def process_approval(self, execution_id: str, step_id: int, approved: bool) -> Dict[str, Any]:
+    def process_approval(self, execution_id: str, step_id: int, approved: bool, user_id: int = None) -> Dict[str, Any]:
+        if user_id is None:
+            raise PermissionError("Authenticated user is required")
+        self._assert_execution_owner(execution_id, user_id)
         config = {"configurable": {"thread_id": execution_id}}
         state_snapshot = self.graph.get_state(config)
         

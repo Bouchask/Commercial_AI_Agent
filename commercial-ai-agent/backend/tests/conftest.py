@@ -8,12 +8,18 @@ from unittest.mock import Mock, MagicMock, patch
 import jwt
 import datetime
 
+# The database engine is created during module imports, so its URL must be set
+# before importing application modules.  A test run must never contact a
+# developer's configured remote database.
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.api.app_improved import create_app
 from backend.config.settings import settings
-from backend.database.connection import SessionLocal, Base, engine
+from backend.database.connection import SessionLocal, engine
+from backend.models.base import Base
 from backend.models.user import User
 from backend.logging_config import setup_logging, CorrelationIDFilter
 from werkzeug.security import generate_password_hash

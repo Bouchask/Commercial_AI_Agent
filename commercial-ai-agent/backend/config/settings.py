@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     
     OPENROUTER_API_KEY: Optional[str] = None
     
+    LLM_PROVIDER: str = "ollama" # "ollama" or "groq"
+    GROQ_API_KEY: Optional[str] = None
+    # Production Groq models; the developer/free tier remains rate-limited.
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
+    GROQ_FAST_MODEL: str = "qwen/qwen3.8-27b"
+    GROQ_REASONING_EFFORT: str = "high"
+    GROQ_JSON_REASONING_EFFORT: str = "none"
+    GROQ_MAX_COMPLETION_TOKENS: int = 2048
+    
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     
@@ -31,22 +40,35 @@ class Settings(BaseSettings):
     
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     ALLOW_DEBUGGER: bool = False
+    ALLOW_ONLINE_LATEX: bool = False
+    DATABASE_POOL_SIZE: int = 2
+    DATABASE_MAX_OVERFLOW: int = 1
+    DATABASE_POOL_TIMEOUT: int = 10
+    LANGGRAPH_POOL_SIZE: int = 2
 
     class Config:
         env_file = __import__("os").path.join(__import__("os").path.dirname(__import__("os").path.dirname(__import__("os").path.abspath(__file__))), ".env")
         env_file_encoding = 'utf-8'
 
-# Manually override with dotenv to ensure .env takes precedence over stale shell variables
+# Load local defaults without overriding variables supplied by the runtime.  This
+# lets CI, Docker and Vercel inject their own configuration safely.
 from dotenv import load_dotenv
 import os
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-load_dotenv(dotenv_path=env_path, override=True)
+load_dotenv(dotenv_path=env_path, override=False)
 
 import logging
 import secrets
 
 settings = Settings(
     OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY", None),
+    LLM_PROVIDER=os.getenv("LLM_PROVIDER", "ollama"),
+    GROQ_API_KEY=os.getenv("GROQ_API_KEY", None),
+    GROQ_MODEL=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+    GROQ_FAST_MODEL=os.getenv("GROQ_FAST_MODEL", "qwen/qwen3.8-27b"),
+    GROQ_REASONING_EFFORT=os.getenv("GROQ_REASONING_EFFORT", "high"),
+    GROQ_JSON_REASONING_EFFORT=os.getenv("GROQ_JSON_REASONING_EFFORT", "none"),
+    GROQ_MAX_COMPLETION_TOKENS=int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "2048")),
     GENERAL_MODEL=os.getenv("GENERAL_MODEL", "gemma4:12b-mlx"),
     HEAVY_MODEL=os.getenv("HEAVY_MODEL", "gemma4:12b-mlx"),
     REASONING_MODEL=os.getenv("REASONING_MODEL", "gemma4:12b-mlx"),

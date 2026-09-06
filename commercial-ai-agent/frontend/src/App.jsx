@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
-import Dashboard from './pages/Dashboard';
+import { lazy, Suspense, useState } from 'react';
 import Login from './pages/Login';
+
+// The dashboard contains the commercial workspace and its heavier UI
+// dependencies. Loading it only after authentication keeps the login page
+// responsive on slow connections.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
@@ -27,7 +31,11 @@ function App() {
     return <Login onLoginSuccess={handleLogin} />;
   }
 
-  return <Dashboard user={user} onLogout={handleLogout} />;
+  return (
+    <Suspense fallback={<main className="grid min-h-screen place-items-center bg-md-background text-md-on-surface">Chargement…</main>}>
+      <Dashboard user={user} onLogout={handleLogout} />
+    </Suspense>
+  );
 }
 
 export default App;

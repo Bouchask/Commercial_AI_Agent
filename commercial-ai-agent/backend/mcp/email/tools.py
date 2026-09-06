@@ -8,7 +8,13 @@ import ssl
 def _validate_attachment_path(filepath: str) -> str:
     """Restrict outbound attachments to the application's managed data folder."""
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    data_root = os.path.realpath(os.path.join(project_root, "data"))
+    is_vercel = os.environ.get("VERCEL") == "1"
+    
+    if is_vercel:
+        data_root = os.path.realpath("/tmp/data")
+    else:
+        data_root = os.path.realpath(os.path.join(project_root, "data"))
+        
     resolved_path = os.path.realpath(filepath)
     if os.path.commonpath([data_root, resolved_path]) != data_root:
         raise ValueError("Attachments must be located in the managed data directory.")

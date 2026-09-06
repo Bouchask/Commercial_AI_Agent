@@ -21,10 +21,19 @@ def validate_tool_arguments(arguments: Dict[str, Any], schema: Dict[str, Any]) -
         if name not in arguments or arguments[name] is None:
             raise ToolInputValidationError(f"Missing required argument: {name}")
 
-    if schema.get("additionalProperties") is False:
-        unknown = set(arguments) - set(properties)
-        if unknown:
-            raise ToolInputValidationError(f"Unsupported argument(s): {', '.join(sorted(unknown))}")
+    unknown = set(arguments) - set(properties)
+    additional_properties = schema.get("additionalProperties", False)
+    if unknown and additional_properties is False:
+        raise ToolInputValidationError(f"Unsupported argument(s): {', '.join(sorted(unknown))}")
+    if unknown and isinstance(additional_properties, dict):
+        for name in unknown:
+            # Validate map-like inputs such as product-code-to-quantity.
+            value_schema = additional_properties
+            expected = value_schema.get("type")
+            if expected == "integer" and (not isinstance(arguments[name], int) or isinstance(arguments[name], bool)):
+                raise ToolInputValidationError(f"{name} must be an integer")
+            if expected == "string" and not isinstance(arguments[name], str):
+                raise ToolInputValidationError(f"{name} must be a string")
 
     def validate_value(value: Any, value_schema: Dict[str, Any], path: str, parent: dict, key: str) -> None:
         if value is None:
@@ -72,7 +81,21 @@ def validate_tool_arguments(arguments: Dict[str, Any], schema: Dict[str, Any]) -
             raise ToolInputValidationError(f"{path} must be a {expected}")
         if "enum" in value_schema and value not in value_schema["enum"]:
             raise ToolInputValidationError(f"{path} must be one of {value_schema['enum']}")
+        if isinstance(value, str):
+            if "minLength" in value_schema and len(value) < value_schema["minLength"]:
+                raise ToolInputValidationError(f"{path} is shorter than the minimum length")
+            if "maxLength" in value_schema and len(value) > value_schema["maxLength"]:
+                raise ToolInputValidationError(f"{path} exceeds the maximum length")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in value_schema and value < value_schema["minimum"]:
+                raise ToolInputValidationError(f"{path} must be at least {value_schema['minimum']}")
+            if "maximum" in value_schema and value > value_schema["maximum"]:
+                raise ToolInputValidationError(f"{path} must be at most {value_schema['maximum']}")
         if expected == "array":
+            if "minItems" in value_schema and len(value) < value_schema["minItems"]:
+                raise ToolInputValidationError(f"{path} must contain at least {value_schema['minItems']} item(s)")
+            if "maxItems" in value_schema and len(value) > value_schema["maxItems"]:
+                raise ToolInputValidationError(f"{path} must contain at most {value_schema['maxItems']} item(s)")
             item_schema = value_schema.get("items", {})
             for index, item in enumerate(value):
                 # Note: nested coercion not strictly required, passing a dummy dict/key for now

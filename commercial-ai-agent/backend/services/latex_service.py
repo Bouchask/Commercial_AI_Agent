@@ -3,6 +3,7 @@ import subprocess
 import uuid
 import tempfile
 from jinja2 import Environment, FileSystemLoader
+from backend.config.settings import settings
 
 
 _LATEX_ESCAPES = {
@@ -50,9 +51,13 @@ class LatexService:
         """
         Compile LaTeX to PDF.
         For MVP, we use a local pdflatex or a docker container.
+        If on Vercel (or if pdflatex fails), we fallback to latexonline.cc.
         """
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        data_dir = os.path.join(base_dir, "data")
+        
+        # If on Vercel, we must write to /tmp because the rest of the filesystem is read-only
+        is_vercel = os.environ.get("VERCEL") == "1"
+        data_dir = "/tmp/data" if is_vercel else os.path.join(base_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
         
         doc_id = str(uuid.uuid4())
@@ -62,27 +67,52 @@ class LatexService:
             with open(tex_path, "w") as f:
                 f.write(tex_content)
                 
-            # Use a dockerized pdflatex for consistency
-            # docker run --rm -i -v "$PWD":/workdir texlive/texlive pdflatex file.tex
-            # If Docker isn't available, fallback to local pdflatex if installed.
-            try:
-                subprocess.run(
-                    ["docker", "run", "--rm", "-v", f"{tmpdir}:/workdir", "-w", "/workdir", "texlive/texlive:latest", "pdflatex", "-interaction=nonstopmode", f"{doc_id}.tex"],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                # Fallback if docker isn't running or installed, try local pdflatex
-                subprocess.run(
-                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmpdir, tex_path],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-            
             pdf_source = os.path.join(tmpdir, f"{doc_id}.pdf")
             pdf_dest = os.path.join(data_dir, f"{document_type}_{doc_id}.pdf")
+            
+            # Helper to compile online
+            def compile_online():
+                if not settings.ALLOW_ONLINE_LATEX:
+                    return False
+                import urllib.parse
+                import urllib.request
+                try:
+                    url = "https://latexonline.cc/compile?text=" + urllib.parse.quote(tex_content)
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req) as response:
+                        if response.status == 200:
+                            with open(pdf_source, "wb") as f:
+                                f.write(response.read())
+                            return True
+                except Exception as e:
+                    print(f"Online compilation failed: {e}")
+                return False
+
+            if is_vercel:
+                success = compile_online()
+                if not success:
+                    raise RuntimeError("PDF generation failed on Vercel via latexonline.cc")
+            else:
+                try:
+                    subprocess.run(
+                        ["docker", "run", "--rm", "-v", f"{tmpdir}:/workdir", "-w", "/workdir", "texlive/texlive:latest", "pdflatex", "-interaction=nonstopmode", f"{doc_id}.tex"],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    try:
+                        subprocess.run(
+                            ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmpdir, tex_path],
+                            check=True,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        # Final fallback
+                        success = compile_online()
+                        if not success:
+                            raise RuntimeError("PDF generation failed: pdflatex not found and online fallback failed.")
             
             if os.path.exists(pdf_source):
                 import shutil

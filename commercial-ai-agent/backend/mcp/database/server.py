@@ -84,8 +84,8 @@ def register_database_tools():
                 "type": "object",
                 "additionalProperties": True
             },
-            risk_level="low",
-            requires_approval=False,
+            risk_level="medium",
+            requires_approval=True,
             handler=create_quote
         )
     )
@@ -108,8 +108,8 @@ def register_database_tools():
                 "type": "object",
                 "additionalProperties": True
             },
-            risk_level="low",
-            requires_approval=False,
+            risk_level="medium",
+            requires_approval=True,
             handler=create_client
         )
     )
@@ -148,8 +148,8 @@ def register_database_tools():
                     "email": {"type": "string"}
                 }
             },
-            risk_level="low",
-            requires_approval=False,
+            risk_level="medium",
+            requires_approval=True,
             handler=find_or_create_client
         )
     )

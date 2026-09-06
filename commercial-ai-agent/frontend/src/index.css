@@ -124,7 +124,7 @@
 .agent-markdown ul, .agent-markdown ol { margin: .45rem 0 .9rem; padding-left: 1.35rem; }
 .agent-markdown li { padding-left: .15rem; }
 .agent-markdown code { border-radius: .5rem; background: var(--color-md-surface-container-low); padding: .15rem .4rem; font-size: .85em; color: var(--color-md-primary); }
-.agent-markdown blockquote { margin: .75rem 0; border-left: 3px solid var(--color-md-primary); padding-left: .85rem; color: var(--color-md-on-surface-variant); background: var(--color-md-primary-container/15); border-radius: 0 .75rem .75rem 0; padding: .5rem .85rem; }
+.agent-markdown blockquote { margin: .75rem 0; border-left: 3px solid var(--color-md-primary); padding-left: .85rem; color: var(--color-md-on-surface-variant); background: color-mix(in srgb, var(--color-md-primary-container) 15%, transparent); border-radius: 0 .75rem .75rem 0; padding: .5rem .85rem; }
 .agent-markdown a {
   display: inline-flex;
   align-items: center;

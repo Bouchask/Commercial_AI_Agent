@@ -15,7 +15,15 @@ def search_client(name: str) -> List[Dict[str, Any]]:
     """Search for a client by name."""
     db = get_db_session()
     try:
-        clients = db.query(Client).filter(Client.name.ilike(f"%{name}%")).all()
+        query = db.query(Client).filter(Client.name.ilike(f"%{name}%"))
+        try:
+            from flask import request
+            user = getattr(request, "current_user", None)
+            if user and (user.role or "").upper() != "ADMIN":
+                query = query.filter(Client.owner_user_id == user.id)
+        except RuntimeError:
+            pass
+        clients = query.all()
         return [
             {
                 "id": c.id,
@@ -38,7 +46,13 @@ def create_client(name: str, email: Optional[str] = None, phone: Optional[str] =
         
     db = get_db_session()
     try:
-        new_client = Client(name=name, email=email, phone=phone, address=address)
+        owner_user_id = None
+        try:
+            from flask import request
+            owner_user_id = getattr(request, "current_user", None).id
+        except (RuntimeError, AttributeError):
+            pass
+        new_client = Client(name=name, email=email, phone=phone, address=address, owner_user_id=owner_user_id)
         db.add(new_client)
         db.commit()
         db.refresh(new_client)
@@ -64,7 +78,18 @@ def find_or_create_client(name: str, email: Optional[str] = None, phone: Optiona
         
     db = get_db_session()
     try:
-        existing = db.query(Client).filter(Client.name.ilike(f"%{name}%")).first()
+        query = db.query(Client).filter(Client.name.ilike(f"%{name}%"))
+        owner_user_id = None
+        try:
+            from flask import request
+            user = getattr(request, "current_user", None)
+            if user:
+                owner_user_id = user.id
+                if (user.role or "").upper() != "ADMIN":
+                    query = query.filter(Client.owner_user_id == user.id)
+        except RuntimeError:
+            pass
+        existing = query.first()
         if existing:
             return {
                 "id": existing.id,
@@ -74,7 +99,7 @@ def find_or_create_client(name: str, email: Optional[str] = None, phone: Optiona
                 "address": existing.address or address
             }
         # Client not found — create new one
-        new_client = Client(name=name, email=email, phone=phone, address=address)
+        new_client = Client(name=name, email=email, phone=phone, address=address, owner_user_id=owner_user_id)
         db.add(new_client)
         db.commit()
         db.refresh(new_client)

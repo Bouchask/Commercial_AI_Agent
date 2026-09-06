@@ -42,13 +42,30 @@ from collections import Counter
 def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, custom_descriptions: Dict[str, str] = None, discount_percent: float = 0.0, tax_rate: float = 0.20) -> Dict[str, Any]:
     """Look up product codes, apply a discount and tax, and format the output for document generation."""
     from backend.mcp.database.tools import get_services
+
+    aliases = {
+        "ecommerce": "WEB-ECOMM",
+        "e-commerce": "WEB-ECOMM",
+        "ecommerce_website": "WEB-ECOMM",
+        "website_ecommerce": "WEB-ECOMM",
+        "seo": "SEO-OPT",
+        "seo_optimization": "SEO-OPT",
+        "seo-optimization": "SEO-OPT",
+        "maintenance_6": "MAINT-6",
+        "maintenance_6_months": "MAINT-6",
+    }
+
+    def normalize_code(code: str) -> str:
+        value = str(code).strip()
+        return aliases.get(value.lower(), value.upper())
     
     if discount_percent < 0.0 or discount_percent > 1.0:
         raise ValueError("discount_percent must be between 0.0 (0%) and 1.0 (100%)")
         
     quantities = quantities or {}
     custom_descriptions = custom_descriptions or {}
-    code_counts = Counter(codes)
+    normalized_codes = [normalize_code(code) for code in codes]
+    code_counts = Counter(normalized_codes)
     services = get_services(list(code_counts.keys()))
     if not services:
         raise ValueError(f"No catalogue products match the requested codes: {', '.join(codes)}")
@@ -57,13 +74,29 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
     subtotal = 0.0
     
     for s in services:
-        qty = quantities.get(s["code"], code_counts[s["code"]])
-        price = s.get("unit_price", 0.0)
+        canonical_code = s["code"]
+        quantity = quantities.get(canonical_code)
+        if quantity is None:
+            quantity = next(
+                (value for key, value in quantities.items() if normalize_code(key) == canonical_code),
+                code_counts[canonical_code],
+            )
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
+            raise ValueError(f"Quantity for {canonical_code} must be a positive integer")
+
+        qty = quantity
+        price = float(s.get("unit_price", 0.0))
         line_total = price * qty
+        description = custom_descriptions.get(canonical_code)
+        if description is None:
+            description = next(
+                (value for key, value in custom_descriptions.items() if normalize_code(key) == canonical_code),
+                s.get("name", "Unknown"),
+            )
         items.append({
             "service_id": s["id"],
-            "code": s["code"],
-            "description": custom_descriptions.get(s["code"], s.get("name", "Unknown")),
+            "code": canonical_code,
+            "description": description,
             "quantity": qty,
             "price": price,
             "line_total": line_total,
@@ -74,7 +107,9 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
     # Apply discount
     discount_amount = subtotal * discount_percent
     subtotal_discounted = subtotal - discount_amount
-    tax = subtotal_discounted * tax_rate
+    # A catalogue item may define a tax rate different from the request default.
+    # Apply the global discount proportionally before calculating each line's tax.
+    tax = sum(item["line_total"] * (1 - discount_percent) * float(item["tax_rate"]) for item in items)
     total = subtotal_discounted + tax
     
     return {

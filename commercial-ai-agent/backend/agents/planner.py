@@ -79,23 +79,41 @@ class PlannerAgent:
         from backend.database.connection import SessionLocal
         from backend.models.service import Service
         
-        # Fetch catalogue to help the planner know the exact durations of services
-        catalogue_str = ""
-        db = SessionLocal()
-        try:
-            services = db.query(Service).all()
-            for s in services:
-                catalogue_str += f"- {s.code}: {s.name} (Price: {s.unit_price})\n"
-        except Exception:
-            pass
-        finally:
-            db.close()
+        # Optimize tools list to reduce token usage
+        intent_actions = intent.get("actions", [])
+        if intent_actions:
+            filtered_tools = [t for t in available_tools if t.get("name") in intent_actions]
+            # Always ensure some essential tools are present if the list is empty
+            if not filtered_tools:
+                essential_tools = ["db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote", "document.generate", "google.sheets.append_row"]
+                filtered_tools = [t for t in available_tools if t.get("name") in essential_tools]
+            available_tools = filtered_tools
 
-        tools_str = json.dumps(available_tools, indent=2)
+        # Fetch catalogue only if quoting is involved to save tokens
+        catalogue_str = ""
+        if "utils.prepare_quote_items" in intent_actions or not intent_actions:
+            db = SessionLocal()
+            try:
+                services = db.query(Service).all()
+                for s in services:
+                    catalogue_str += f"- {s.code}: {s.name} (Price: {s.unit_price})\n"
+            except Exception:
+                pass
+            finally:
+                db.close()
+
+        # Simplify tool representation by removing heavy description fields if they are too long
+        minimized_tools = []
+        for t in available_tools:
+            t_min = dict(t)
+            # Remove high-token descriptions from schema properties if needed, but keeping them for now as we filtered the tools.
+            minimized_tools.append(t_min)
+
+        tools_str = json.dumps(minimized_tools, indent=2)
         intent_str = json.dumps(intent, indent=2)
         current_date = datetime.datetime.now().isoformat()
         
-        prompt = f"Current Date and Time: {current_date}\n\nOriginal User Request:\n{user_input}\n\nPrevious Context:\n{previous_context}\n\nStructured Intent:\n{intent_str}\n\nService Catalogue (USE THIS TO MATCH DURATIONS!):\n{catalogue_str}\n\nAvailable Tools:\n{tools_str}\n\nStart your step numbering from ID: {next_step_id}"
+        prompt = f"Current Date and Time: {current_date}\n\nOriginal User Request:\n{user_input}\n\nPrevious Context:\n{previous_context}\n\nStructured Intent:\n{intent_str}\n\nService Catalogue:\n{catalogue_str}\n\nAvailable Tools:\n{tools_str}\n\nStart your step numbering from ID: {next_step_id}"
         
         # We use commercial_reasoning capability for accurate planning
         return self.router.generate_json(
