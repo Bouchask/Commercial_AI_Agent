@@ -1,9 +1,38 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, ShieldCheck, Sparkles, X, Calendar, Table } from "lucide-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+
+function SecureIframe({ url, title }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchBlob = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (!res.ok) throw new Error("Erreur de chargement");
+        const blob = await res.blob();
+        if (active) setBlobUrl(URL.createObjectURL(blob));
+      } catch (err) {
+        if (active) setError(err.message);
+      }
+    };
+    fetchBlob();
+    return () => { active = false; };
+  }, [url]);
+
+  if (error) return <div className="p-4 text-red-500 text-xs flex items-center justify-center h-full">Erreur: {error}</div>;
+  if (!blobUrl) return <div className="p-4 text-md-on-surface-variant text-xs flex items-center justify-center h-full">Chargement du document...</div>;
+
+  return <iframe src={blobUrl} className="w-full h-full border-0" title={title} />;
+}
 
 export function ChatMessage({ message, onApprove }) {
   const isUser = message.role === "user";
@@ -89,7 +118,7 @@ export function ChatMessage({ message, onApprove }) {
                     </div>
                     {/* Preview */}
                     <div className="w-full h-[400px] border border-md-outline-variant/30 rounded-2xl overflow-hidden bg-white mt-1 relative shadow-sm">
-                      <iframe src={url} className="w-full h-full border-0" title={`Aperçu ${filename}`} />
+                      <SecureIframe url={url} title={`Aperçu ${filename}`} />
                     </div>
                   </div>
                 );
