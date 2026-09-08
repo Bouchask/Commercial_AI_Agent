@@ -388,6 +388,17 @@ class LangGraphOrchestrator:
                 if final_response:
                     db.add(Message(execution_id=execution_id, role="agent", content=final_response))
                     db.commit()
+                elif result_state.get("status") == "waiting_approval":
+                    pending = result_state.get("pending_approval", {})
+                    approval_msg = json.dumps({
+                        "type": "approval",
+                        "tool": pending.get("tool"),
+                        "arguments": pending.get("arguments"),
+                        "step": pending.get("step"),
+                        "status": "pending"
+                    })
+                    db.add(Message(execution_id=execution_id, role="agent_action", content=approval_msg))
+                    db.commit()
             finally:
                 db.close()
                     
@@ -419,6 +430,17 @@ class LangGraphOrchestrator:
                 final_response = result_state.get("final_response")
                 if final_response:
                     db.add(Message(execution_id=execution_id, role="agent", content=final_response))
+                    db.commit()
+                elif result_state.get("status") == "waiting_approval":
+                    pending = result_state.get("pending_approval", {})
+                    approval_msg = json.dumps({
+                        "type": "approval",
+                        "tool": pending.get("tool"),
+                        "arguments": pending.get("arguments"),
+                        "step": pending.get("step"),
+                        "status": "pending"
+                    })
+                    db.add(Message(execution_id=execution_id, role="agent_action", content=approval_msg))
                     db.commit()
             finally:
                 db.close()

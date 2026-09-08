@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, ShieldCheck, Sparkles, X, Calendar, Table } from "lucide-react";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+
 export function ChatMessage({ message, onApprove }) {
   const isUser = message.role === "user";
 
@@ -38,6 +40,7 @@ export function ChatMessage({ message, onApprove }) {
     if (typeof value === 'object' && value !== null) {
       return <span className="text-md-on-surface">{JSON.stringify(value)}</span>;
     }
+    return <span className="text-md-on-surface">{String(value)}</span>;
   };
 
   /* ── Email Preview (MD3 Card) ── */
@@ -74,7 +77,7 @@ export function ChatMessage({ message, onApprove }) {
             <div className="flex flex-col gap-4">
               {attachments.map((path, idx) => {
                 const filename = path.split('/').pop().split('\\').pop();
-                const url = `http://localhost:5001/api/documents/${filename}`;
+                const url = `${API_BASE_URL}/api/documents/${filename}`;
                 const isPdf = filename.toLowerCase().endsWith('.pdf');
                 return (
                   <div key={idx} className="flex flex-col gap-2">
