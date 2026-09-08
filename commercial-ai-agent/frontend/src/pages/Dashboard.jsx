@@ -63,7 +63,7 @@ function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadshee
       </div>
 
       {/* New Chat */}
-      <button onClick={() => { onNewChat(); setView('chat'); }} className="new-chat-button">
+      <button onClick={() => { onNewChat(); setView('chat'); if (window.innerWidth < 768) onClose(); }} className="new-chat-button">
         <MessageSquarePlus className="size-[18px]" />
         Nouvelle discussion
       </button>
@@ -72,19 +72,19 @@ function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadshee
       <div className="mt-5 flex-1 overflow-y-auto px-1">
         <div className="sidebar-label">Navigation</div>
         <div className="mt-1 space-y-1">
-          <button onClick={() => setView('clients')} className="sidebar-chat">
+          <button onClick={() => { setView('clients'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
             <UserRound className="size-4 shrink-0" /> Clients
           </button>
-          <button onClick={() => setView('services')} className="sidebar-chat">
+          <button onClick={() => { setView('services'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
             <Settings className="size-4 shrink-0" /> Services
           </button>
-          <button onClick={() => setView('quotes')} className="sidebar-chat">
+          <button onClick={() => { setView('quotes'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
             <Bot className="size-4 shrink-0" /> Devis
           </button>
-          <button onClick={() => setView('invoices')} className="sidebar-chat">
+          <button onClick={() => { setView('invoices'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
             <Table className="size-4 shrink-0" /> Factures
           </button>
-          <button onClick={() => setView('assignments')} className="sidebar-chat">
+          <button onClick={() => { setView('assignments'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
             <Plus className="size-4 shrink-0" /> Assignations
           </button>
         </div>

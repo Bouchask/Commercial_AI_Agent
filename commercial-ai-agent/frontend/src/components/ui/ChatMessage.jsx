@@ -117,7 +117,7 @@ export function ChatMessage({ message, onApprove }) {
                       <span className="text-xs truncate max-w-[250px] font-medium">{filename}</span>
                     </div>
                     {/* Preview */}
-                    <div className="w-full h-[400px] border border-md-outline-variant/30 rounded-2xl overflow-hidden bg-white mt-1 relative shadow-sm">
+                    <div className="w-full h-[300px] sm:h-[450px] lg:h-[600px] border border-md-outline-variant/30 rounded-2xl overflow-hidden bg-white mt-1 relative shadow-sm">
                       <SecureIframe url={url} title={`Aperçu ${filename}`} />
                     </div>
                   </div>
