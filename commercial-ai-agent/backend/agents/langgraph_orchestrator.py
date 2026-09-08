@@ -364,6 +364,8 @@ class LangGraphOrchestrator:
             # Resume execution (it will enter 'wait_for_approval' and then loop to 'execute')
             result_state = self.graph.invoke(None, config)
             
+            from backend.database.connection import SessionLocal
+            from backend.models.execution import Message
             # Update the agent_action message status
             db = SessionLocal()
             try:
@@ -395,6 +397,8 @@ class LangGraphOrchestrator:
             self.graph.update_state(config, {"status": "failed", "error": "User rejected approval"})
             result_state = self.graph.invoke(None, config)
             
+            from backend.database.connection import SessionLocal
+            from backend.models.execution import Message
             db = SessionLocal()
             try:
                 msg = db.query(Message).filter(
