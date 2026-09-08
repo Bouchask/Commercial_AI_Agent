@@ -716,10 +716,30 @@ export default function Dashboard({ user, onLogout }) {
       });
       if (res.ok) {
         const history = await res.json();
-        const loadedMessages = history.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
+        const loadedMessages = history.map(msg => {
+          if (msg.role === "agent_action") {
+            try {
+              const data = JSON.parse(msg.content);
+              return {
+                role: "agent",
+                content: "Validation requise...",
+                approval: {
+                  execution_id: id,
+                  step_id: data.step,
+                  tool: data.tool,
+                  arguments: data.arguments,
+                  status: data.status // "pending" | "approved" | "rejected"
+                }
+              };
+            } catch (e) {
+              return { role: "agent", content: msg.content };
+            }
+          }
+          return {
+            role: msg.role,
+            content: msg.content
+          };
+        });
         setMessages(loadedMessages.length > 0 ? loadedMessages : [WELCOME_MESSAGE]);
         setThreadId(id);
         setActiveView('chat');
@@ -820,8 +840,10 @@ export default function Dashboard({ user, onLogout }) {
         message.approval?.execution_id === approval.execution_id
           ? {
               ...message,
-              approval: null,
-              content: `${message.content}\n\n> Action ${approved ? "approuvée" : "refusée"}.`,
+              approval: {
+                ...message.approval,
+                status: approved ? "approved" : "rejected"
+              },
             }
           : message,
       ),

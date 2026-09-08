@@ -286,14 +286,26 @@ export function ChatMessage({ message, onApprove }) {
               </div>
             )}
 
-            {/* ── Action Buttons (MD3 Pill) ── */}
+            {/* ── Action Buttons or Status Badge (MD3 Pill) ── */}
             <div className="mt-5 flex flex-wrap gap-2">
-              <button onClick={() => onApprove(message.approval, true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-5 py-2 text-[13px] font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90 hover:shadow-md transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
-                <Check className="size-3.5" /> Approuver
-              </button>
-              <button onClick={() => onApprove(message.approval, false)} className="inline-flex items-center gap-1.5 rounded-full border border-md-outline bg-transparent px-5 py-2 text-[13px] font-medium text-md-on-surface hover:bg-md-primary/5 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
-                <X className="size-3.5" /> Refuser
-              </button>
+              {!message.approval.status || message.approval.status === "pending" ? (
+                <>
+                  <button onClick={() => onApprove(message.approval, true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-5 py-2 text-[13px] font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90 hover:shadow-md transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
+                    <Check className="size-3.5" /> Approuver
+                  </button>
+                  <button onClick={() => onApprove(message.approval, false)} className="inline-flex items-center gap-1.5 rounded-full border border-md-outline bg-transparent px-5 py-2 text-[13px] font-medium text-md-on-surface hover:bg-md-primary/5 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
+                    <X className="size-3.5" /> Refuser
+                  </button>
+                </>
+              ) : message.approval.status === "approved" ? (
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100/50 border border-green-500/30 px-5 py-2 text-[13px] font-medium text-green-700 shadow-sm">
+                  <Check className="size-3.5" /> Action approuvée
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-red-100/50 border border-red-500/30 px-5 py-2 text-[13px] font-medium text-red-700 shadow-sm">
+                  <X className="size-3.5" /> Action refusée
+                </div>
+              )}
             </div>
           </section>
         )}

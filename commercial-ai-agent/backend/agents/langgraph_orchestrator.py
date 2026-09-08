@@ -316,6 +316,22 @@ class LangGraphOrchestrator:
                 db.commit()
             finally:
                 db.close()
+        elif result_state.get("status") == "waiting_approval":
+            pending = result_state.get("pending_approval", {})
+            import json
+            approval_msg = json.dumps({
+                "type": "approval",
+                "tool": pending.get("tool"),
+                "arguments": pending.get("arguments"),
+                "step": pending.get("step"),
+                "status": "pending"
+            })
+            db = SessionLocal()
+            try:
+                db.add(Message(execution_id=execution_id, role="agent_action", content=approval_msg))
+                db.commit()
+            finally:
+                db.close()
                 
         return self._format_response(result_state, execution_id)
 
@@ -347,15 +363,66 @@ class LangGraphOrchestrator:
             
             # Resume execution (it will enter 'wait_for_approval' and then loop to 'execute')
             result_state = self.graph.invoke(None, config)
+            
+            # Update the agent_action message status
+            db = SessionLocal()
+            try:
+                msg = db.query(Message).filter(
+                    Message.execution_id == execution_id,
+                    Message.role == "agent_action"
+                ).order_by(Message.id.desc()).first()
+                if msg:
+                    import json
+                    try:
+                        data = json.loads(msg.content)
+                        if data.get("step") == step_id:
+                            data["status"] = "approved"
+                            msg.content = json.dumps(data)
+                            db.commit()
+                    except:
+                        pass
+                
+                final_response = result_state.get("final_response")
+                if final_response:
+                    db.add(Message(execution_id=execution_id, role="agent", content=final_response))
+                    db.commit()
+            finally:
+                db.close()
+                    
             return self._format_response(result_state, execution_id)
         else:
             # If rejected, we update the state directly to failed and run it to generate response
             self.graph.update_state(config, {"status": "failed", "error": "User rejected approval"})
             result_state = self.graph.invoke(None, config)
+            
+            db = SessionLocal()
+            try:
+                msg = db.query(Message).filter(
+                    Message.execution_id == execution_id,
+                    Message.role == "agent_action"
+                ).order_by(Message.id.desc()).first()
+                if msg:
+                    import json
+                    try:
+                        data = json.loads(msg.content)
+                        if data.get("step") == step_id:
+                            data["status"] = "rejected"
+                            msg.content = json.dumps(data)
+                            db.commit()
+                    except:
+                        pass
+                
+                final_response = result_state.get("final_response")
+                if final_response:
+                    db.add(Message(execution_id=execution_id, role="agent", content=final_response))
+                    db.commit()
+            finally:
+                db.close()
+                    
             return {
                 "status": "failed",
                 "execution_id": execution_id,
-                "message": "Execution cancelled due to user rejection."
+                "message": final_response or "Execution cancelled due to user rejection."
             }
 
     def _format_response(self, state: Dict[str, Any], execution_id: str) -> Dict[str, Any]:
