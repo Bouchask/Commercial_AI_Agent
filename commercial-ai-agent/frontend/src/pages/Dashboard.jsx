@@ -550,6 +550,7 @@ function SheetsPanel({ spreadsheetId, user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeSheet, setActiveSheet] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const token = localStorage.getItem('auth_token');
 
   useEffect(() => {
@@ -619,9 +620,10 @@ function SheetsPanel({ spreadsheetId, user }) {
         </div>
       ) : (
         <div className="glass-panel flex-1 p-0 flex flex-col overflow-hidden">
-          {/* Tab bar */}
-          <div className="flex items-center gap-2 border-b border-md-outline-variant/30 bg-md-surface-container-high/50 p-2 overflow-x-auto">
-            {Object.keys(data || {}).map(sheetName => (
+          {/* Tab bar & Search */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-md-outline-variant/30 bg-md-surface-container-high/50 p-3">
+            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+              {Object.keys(data || {}).map(sheetName => (
               <button
                 key={sheetName}
                 onClick={() => setActiveSheet(sheetName)}
@@ -634,14 +636,26 @@ function SheetsPanel({ spreadsheetId, user }) {
                 {sheetName}
               </button>
             ))}
+            </div>
+            
+            <div className="relative w-full sm:w-64 shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-md-on-surface-variant/50" />
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-md-outline-variant/30 rounded-full outline-none focus:border-md-primary transition-colors"
+              />
+            </div>
           </div>
           
           {/* Table */}
-          <div className="flex-1 overflow-auto p-4">
+          <div className="flex-1 overflow-auto p-4 bg-white">
             {activeSheet && data[activeSheet] && data[activeSheet].length > 0 ? (
               <div className="inline-block min-w-full align-middle">
                 <table className="min-w-full divide-y divide-md-outline-variant/30">
-                  <thead>
+                  <thead className="sticky top-0 bg-white shadow-sm z-10">
                     <tr>
                       {data[activeSheet][0].map((header, idx) => (
                         <th key={idx} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-md-primary bg-md-surface-container-high/30 whitespace-nowrap">
@@ -650,8 +664,14 @@ function SheetsPanel({ spreadsheetId, user }) {
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-md-outline-variant/20">
-                    {data[activeSheet].slice(1).map((row, rowIdx) => (
+                  <tbody className="divide-y divide-md-outline-variant/10">
+                    {data[activeSheet].slice(1)
+                      .filter(row => {
+                        if (!searchTerm) return true;
+                        const term = searchTerm.toLowerCase();
+                        return row.some(cell => String(cell).toLowerCase().includes(term));
+                      })
+                      .map((row, rowIdx) => (
                       <tr key={rowIdx} className="hover:bg-md-primary/5 transition-colors duration-200">
                         {data[activeSheet][0].map((_, colIdx) => (
                           <td key={colIdx} className="px-4 py-3 text-sm text-md-on-surface truncate max-w-[150px] sm:max-w-[250px] md:max-w-[350px]" title={row[colIdx] || ''}>

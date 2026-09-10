@@ -136,20 +136,23 @@ def generate_excel_document(
     if document_type != "quote":
         raise ValueError("Only quote documents are available in this MVP.")
     
-    # Resolve client_name and client_id dynamically
+    # Resolve client_name, client_id, and client_email dynamically
     resolved_client_id = int(client_id) if client_id is not None else None
     resolved_client_name = client_name
+    client_email = "noemail"
     
     db = SessionLocal()
     try:
-        if resolved_client_id is not None and not resolved_client_name:
+        if resolved_client_id is not None:
             client = db.query(Client).filter(Client.id == resolved_client_id).first()
             if client:
                 resolved_client_name = client.name
-        elif resolved_client_name and resolved_client_id is None:
+                client_email = client.email or client_email
+        elif resolved_client_name:
             client = db.query(Client).filter(Client.name == resolved_client_name).first()
             if client:
                 resolved_client_id = client.id
+                client_email = client.email or client_email
                 
         if not resolved_client_name:
             resolved_client_name = "Client" # Fallback if totally unknown
@@ -158,6 +161,7 @@ def generate_excel_document(
 
     context = {
         "client_name": resolved_client_name,
+        "client_email": client_email,
         "items": items,
         "subtotal": total_ht,
         "original_subtotal": original_subtotal,

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, ShieldCheck, Sparkles, X, Calendar, Table } from "lucide-react";
+import { ExcelViewer } from "./ExcelViewer";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -118,7 +119,11 @@ export function ChatMessage({ message, onApprove }) {
                     </div>
                     {/* Preview */}
                     <div className="w-full h-[300px] sm:h-[450px] lg:h-[600px] border border-md-outline-variant/30 rounded-2xl overflow-hidden bg-white mt-1 relative shadow-sm">
-                      <SecureIframe url={url} title={`Aperçu ${filename}`} />
+                      {isPdf ? (
+                        <SecureIframe url={url} title={`Aperçu ${filename}`} />
+                      ) : (
+                        <ExcelViewer url={url} title={`Aperçu ${filename}`} />
+                      )}
                     </div>
                   </div>
                 );

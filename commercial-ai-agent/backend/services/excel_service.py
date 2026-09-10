@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -9,6 +10,8 @@ class ExcelService:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.data_dir = os.path.join(base_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
+        self.clients_dir = os.path.join(self.data_dir, "clients")
+        os.makedirs(self.clients_dir, exist_ok=True)
         
         # Design tokens
         self.primary_color = "2B3A42" # Dark Blue/Gray
@@ -31,6 +34,7 @@ class ExcelService:
 
         document_number = context.get("document_number", f"QTE-{str(uuid.uuid4())[:8].upper()}")
         client_name = context.get("client_name", "Client Inconnu")
+        client_email = context.get("client_email", "noemail")
         items = context.get("items", [])
         
         # 1. Header Section
@@ -113,8 +117,17 @@ class ExcelService:
         ws.column_dimensions['E'].width = 20
         
         # 6. Save File
-        filename = f"quote_{str(uuid.uuid4())}.xlsx"
-        filepath = os.path.join(self.data_dir, filename)
+        safe_client_name = "".join([c for c in client_name if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+        safe_client_email = "".join([c for c in client_email if c.isalnum() or c in ('@', '.', '-', '_')]).strip()
+        client_folder_name = f"{safe_client_name}_{safe_client_email}"
+        
+        client_dir = os.path.join(self.clients_dir, client_folder_name)
+        facture_dir = os.path.join(client_dir, "facture")
+        os.makedirs(facture_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"{safe_client_name}_{document_number}_{timestamp}.xlsx"
+        filepath = os.path.join(facture_dir, filename)
         wb.save(filepath)
         
         return filepath

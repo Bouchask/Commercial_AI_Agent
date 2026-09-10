@@ -1,8 +1,10 @@
+import os
+import json
+import datetime
+import dateutil.parser
 from typing import Dict, Any, List, Optional
 from googleapiclient.discovery import build
 from backend.mcp.google_auth import get_user_google_credentials
-import datetime
-import dateutil.parser
 
 def create_meeting(
     title: str, 
@@ -58,6 +60,37 @@ def create_meeting(
                 html_link = f"{html_link}{join_char}authuser={user.email}"
         except Exception:
             pass
+            
+        # Save meeting info to client folder if possible
+        try:
+            # We assume the first attendee is the primary client, or we try to guess the client name
+            if attendees:
+                client_email = attendees[0]
+                client_name = client_email.split('@')[0] # Fallback name
+                safe_client_name = "".join([c for c in client_name if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
+                safe_client_email = "".join([c for c in client_email if c.isalnum() or c in ('@', '.', '-', '_')]).strip()
+                client_folder_name = f"{safe_client_name}_{safe_client_email}"
+                
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                meet_dir = os.path.join(base_dir, "data", "clients", client_folder_name, "meet")
+                os.makedirs(meet_dir, exist_ok=True)
+                
+                timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                filename = f"meet_{timestamp}.json"
+                filepath = os.path.join(meet_dir, filename)
+                
+                with open(filepath, "w") as f:
+                    json.dump({
+                        "title": title,
+                        "description": description,
+                        "start_time": start_time,
+                        "end_time": end_dt.isoformat(),
+                        "attendees": attendees,
+                        "event_id": event_result.get('id'),
+                        "link": html_link
+                    }, f, indent=4)
+        except Exception as file_error:
+            print(f"Failed to save meeting file to client folder: {file_error}")
             
         return {
             "status": "success",
