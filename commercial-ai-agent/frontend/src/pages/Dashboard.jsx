@@ -551,6 +551,7 @@ function SheetsPanel({ spreadsheetId, user }) {
   const [error, setError] = useState(null);
   const [activeSheet, setActiveSheet] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRow, setSelectedRow] = useState(null);
   const token = localStorage.getItem('auth_token');
 
   useEffect(() => {
@@ -672,9 +673,13 @@ function SheetsPanel({ spreadsheetId, user }) {
                         return row.some(cell => String(cell).toLowerCase().includes(term));
                       })
                       .map((row, rowIdx) => (
-                      <tr key={rowIdx} className="hover:bg-md-primary/5 transition-colors duration-200">
+                      <tr 
+                        key={rowIdx} 
+                        onClick={() => setSelectedRow(row)}
+                        className="hover:bg-md-primary/5 transition-colors duration-200 cursor-pointer"
+                      >
                         {data[activeSheet][0].map((_, colIdx) => (
-                          <td key={colIdx} className="px-4 py-3 text-sm text-md-on-surface truncate max-w-[150px] sm:max-w-[250px] md:max-w-[350px]" title={row[colIdx] || ''}>
+                          <td key={colIdx} className="px-4 py-3 text-sm text-md-on-surface truncate max-w-[150px] sm:max-w-[250px] md:max-w-[350px]">
                             {row[colIdx] || ''}
                           </td>
                         ))}
@@ -689,6 +694,54 @@ function SheetsPanel({ spreadsheetId, user }) {
               </div>
             )}
           </div>
+          
+          {/* Detail Modal */}
+          <AnimatePresence>
+            {selectedRow && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                  onClick={() => setSelectedRow(null)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="relative w-full max-w-2xl max-h-[90vh] bg-md-surface rounded-2xl shadow-xl flex flex-col overflow-hidden border border-md-outline-variant/30"
+                >
+                  <div className="flex items-center justify-between p-4 sm:p-6 border-b border-md-outline-variant/30 bg-md-surface-container-low">
+                    <div>
+                      <h3 className="text-xl font-medium text-md-on-surface">Détails de l'enregistrement</h3>
+                      <p className="text-sm text-md-on-surface-variant mt-1">Feuille : <span className="font-medium text-md-primary">{activeSheet}</span></p>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedRow(null)}
+                      className="p-2 rounded-full hover:bg-md-surface-container-high transition-colors text-md-on-surface-variant"
+                    >
+                      <X className="size-5" />
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                      {data[activeSheet][0].map((header, idx) => {
+                        const cellValue = selectedRow[idx] || '—';
+                        return (
+                          <div key={idx} className="flex flex-col gap-1.5 p-3 rounded-xl hover:bg-md-primary/5 transition-colors border border-transparent hover:border-md-outline-variant/10">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-md-primary/70">{header}</span>
+                            <span className="text-sm text-md-on-surface break-words whitespace-pre-wrap leading-relaxed">{cellValue}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </motion.section>
