@@ -203,9 +203,9 @@ Réponse finale
 
 ### Outils MCP
 
-L'application utilise le protocole **MCP (Model Context Protocol)** pour structurer les capacités de l'agent en outils réutilisables. Il y a **16 outils** répartis en 5 catégories :
+L'application utilise le protocole **MCP (Model Context Protocol)** pour structurer les capacités de l'agent en outils réutilisables. Il y a **17 outils** répartis en 5 catégories :
 
-#### 🗄️ Outils Base de Données (6 outils)
+#### 🗄️ Outils Base de Données (8 outils)
 | Outil | Description | Approbation |
 |-------|-------------|-------------|
 | `db.search_client` | Recherche un client par nom | ❌ |
