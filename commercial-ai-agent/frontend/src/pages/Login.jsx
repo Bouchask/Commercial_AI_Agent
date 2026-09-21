@@ -86,8 +86,12 @@ export default function Login({ onLoginSuccess }) {
           <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-md-primary text-white shadow-md">
             <Sparkles className="size-7" />
           </div>
-          <h1 className="text-3xl font-medium text-md-on-background tracking-tight">Bienvenue</h1>
-          <p className="mt-2 text-sm text-md-on-surface-variant">Connectez-vous pour accéder à Commercial AI</p>
+          <h1 className="text-3xl font-medium text-md-on-background tracking-tight">Commercial AI</h1>
+          <p className="mt-4 text-sm text-md-on-surface-variant leading-relaxed">
+            Votre assistant intelligent pour automatiser la gestion commerciale.
+            Générez des devis, envoyez des e-mails à vos clients via Gmail et synchronisez 
+            vos données avec Google Sheets et Google Agenda.
+          </p>
         </div>
 
         {/* Card */}
@@ -176,6 +180,12 @@ export default function Login({ onLoginSuccess }) {
               </>
             )}
           </button>
+          {/* Legal Links Footer */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs text-md-on-surface-variant/70">
+            <a href="/privacy" className="hover:text-md-primary hover:underline transition-colors">Politique de Confidentialité</a>
+            <span>•</span>
+            <a href="/terms" className="hover:text-md-primary hover:underline transition-colors">Conditions d'Utilisation</a>
+          </div>
         </div>
 
       </div>
