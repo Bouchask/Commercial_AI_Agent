@@ -276,7 +276,7 @@ function ServicesPanel() {
         <h3 className="mb-4 text-xs font-medium uppercase tracking-wider text-md-primary">Nouveau Service</h3>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={title} onChange={(e) => setTitle(e.target.value)} className="input flex-1" placeholder="Intitulé du service (ex: Création Site Web)" />
-          <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="input sm:w-32" placeholder="Prix (€)" />
+          <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="input sm:w-32" placeholder="Prix (MAD)" />
           <button onClick={createService} className="btn-primary">
             <Plus className="size-4" /> Ajouter
           </button>
@@ -288,7 +288,7 @@ function ServicesPanel() {
             <motion.div key={s.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.05, 0.5), ease: [0.2, 0, 0, 1] }} className="list-item-glass flex-row items-center justify-between">
               <span className="font-medium text-md-on-surface truncate pr-2">{s.name || s.title}</span>
               <span className="shrink-0 rounded-full bg-md-primary-container px-3 py-1 text-sm font-medium text-md-on-primary-container">
-                {s.price ?? s.unit_price} €
+                {s.price ?? s.unit_price} MAD
               </span>
             </motion.div>
           ))}
@@ -366,7 +366,7 @@ function QuotesPanel() {
               <input type="number" value={it.quantity} onChange={(e) => updateItem(idx, 'quantity', e.target.value)} className="input sm:w-24 text-center" placeholder="Qté" title="Quantité" />
               <div className="relative sm:w-32">
                 <input type="number" value={it.unit_price} onChange={(e) => updateItem(idx, 'unit_price', e.target.value)} className="input w-full pr-8" placeholder="Prix" title="Prix Unitaire" />
-                <span className="absolute right-3 top-3 text-md-on-surface-variant text-sm">€</span>
+                <span className="absolute right-3 top-3 text-md-on-surface-variant text-sm">MAD</span>
               </div>
             </div>
           ))}
@@ -390,7 +390,7 @@ function QuotesPanel() {
                   <div className="text-sm text-md-on-surface-variant">Client ID: {q.client_id}</div>
                 </div>
                 <div className="rounded-full bg-md-primary-container px-3 py-1 text-sm font-medium text-md-on-primary-container">
-                  {q.total_amount ?? q.total} €
+                  {q.total_amount ?? q.total} MAD
                 </div>
               </div>
             </motion.div>
@@ -443,7 +443,7 @@ function InvoicesPanel() {
         <div className="flex flex-col sm:flex-row gap-3">
           <select value={quoteId} onChange={(e) => setQuoteId(e.target.value)} className="input flex-1">
             <option value="">Sélectionner un devis existant</option>
-            {quotes.map(q => <option key={q.id} value={q.id}>Devis #{q.id} — {q.total_amount ?? q.total} €</option>)}
+            {quotes.map(q => <option key={q.id} value={q.id}>Devis #{q.id} — {q.total_amount ?? q.total} MAD</option>)}
           </select>
           <button onClick={createInvoice} className="btn-primary">
             <Plus className="size-4" /> Émettre Facture
@@ -456,7 +456,7 @@ function InvoicesPanel() {
             <motion.div key={inv.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(i * 0.05, 0.5), ease: [0.2, 0, 0, 1] }} className="list-item-glass relative overflow-hidden border-l-4 border-l-md-tertiary">
               <div aria-hidden="true" className="absolute -right-6 -top-6 size-24 rounded-full bg-md-tertiary-container/30 blur-xl" />
               <div className="font-medium text-md-on-surface mb-1">Facture #{inv.id}</div>
-              <div className="text-2xl font-medium tracking-tight text-md-primary">{inv.total_amount ?? inv.total} <span className="text-base text-md-primary/60">€</span></div>
+              <div className="text-2xl font-medium tracking-tight text-md-primary">{inv.total_amount ?? inv.total} <span className="text-base text-md-primary/60">MAD</span></div>
             </motion.div>
           ))}
         </AnimatePresence>

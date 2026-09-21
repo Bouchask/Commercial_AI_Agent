@@ -263,7 +263,7 @@ export function ChatMessage({ message, onApprove }) {
                   </div>
                   <div className="text-right">
                     <p className="text-md-on-surface-variant text-xs uppercase tracking-wider mb-0.5">Montant TTC</p>
-                    <p className="text-xl font-medium text-md-primary">{(message.approval.arguments.total_ttc || 0).toFixed(2)} €</p>
+                    <p className="text-xl font-medium text-md-primary">{(message.approval.arguments.total_ttc || 0).toFixed(2)} MAD</p>
                   </div>
                 </div>
 
@@ -283,8 +283,8 @@ export function ChatMessage({ message, onApprove }) {
                           {item.description && <div className="text-md-on-surface-variant text-xs truncate mt-0.5">{item.description}</div>}
                         </div>
                         <div className="col-span-2 text-right">{item.quantity}</div>
-                        <div className="col-span-2 text-right">{(item.price || item.unit_price || 0).toFixed(2)} €</div>
-                        <div className="col-span-2 text-right font-medium">{(item.line_total || (item.quantity * (item.price || item.unit_price || 0))).toFixed(2)} €</div>
+                        <div className="col-span-2 text-right">{(item.price || item.unit_price || 0).toFixed(2)} MAD</div>
+                        <div className="col-span-2 text-right font-medium">{(item.line_total || (item.quantity * (item.price || item.unit_price || 0))).toFixed(2)} MAD</div>
                       </div>
                     ))}
                   </div>
@@ -295,21 +295,21 @@ export function ChatMessage({ message, onApprove }) {
                   <div className="w-48 flex flex-col gap-1.5 text-xs">
                     <div className="flex justify-between text-md-on-surface-variant">
                       <span>Total HT</span>
-                      <span>{(message.approval.arguments.total_ht || message.approval.arguments.original_subtotal || 0).toFixed(2)} €</span>
+                      <span>{(message.approval.arguments.total_ht || message.approval.arguments.original_subtotal || 0).toFixed(2)} MAD</span>
                     </div>
                     {message.approval.arguments.discount_amount > 0 && (
                       <div className="flex justify-between text-md-tertiary">
                         <span>Remise</span>
-                        <span>-{(message.approval.arguments.discount_amount || 0).toFixed(2)} €</span>
+                        <span>-{(message.approval.arguments.discount_amount || 0).toFixed(2)} MAD</span>
                       </div>
                     )}
                     <div className="flex justify-between text-md-on-surface-variant">
                       <span>TVA</span>
-                      <span>{(message.approval.arguments.tax || message.approval.arguments.total_tax || 0).toFixed(2)} €</span>
+                      <span>{(message.approval.arguments.tax || message.approval.arguments.total_tax || 0).toFixed(2)} MAD</span>
                     </div>
                     <div className="flex justify-between text-md-primary font-medium pt-1.5 border-t border-md-outline-variant/30 mt-1 text-[13px]">
                       <span>Total TTC</span>
-                      <span>{(message.approval.arguments.total_ttc || 0).toFixed(2)} €</span>
+                      <span>{(message.approval.arguments.total_ttc || 0).toFixed(2)} MAD</span>
                     </div>
                   </div>
                 </div>
