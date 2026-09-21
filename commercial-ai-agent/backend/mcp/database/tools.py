@@ -194,7 +194,16 @@ def create_quote(client_id: int, items: List[Dict[str, Any]], total_ht: float, t
         for item in items:
             service_id = item.get("service_id", item.get("id"))
             if not service_id:
-                raise ValueError("Each quote item requires a service_id.")
+                desc = item.get("description", "Service personnalisé")
+                service = db.query(Service).filter(Service.name == desc).first()
+                if not service:
+                    price = float(item.get("price", 0.0))
+                    code = f"CUS-{str(uuid.uuid4())[:8].upper()}"
+                    service = Service(code=code, name=desc, description=desc, unit_price=price)
+                    db.add(service)
+                    db.flush()
+                service_id = service.id
+                
             service = db.get(Service, int(service_id))
             if not service:
                 raise ValueError(f"Service {service_id} does not exist.")

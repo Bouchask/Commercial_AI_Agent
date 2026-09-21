@@ -2,7 +2,18 @@ import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, ShieldCheck, Sparkles, X, Calendar, Table } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ExcelViewer } from "./ExcelViewer";
+
+const TOOL_NAMES = {
+  'db.find_or_create_client': 'Recherche / Création de client',
+  'db.create_quote': 'Création de devis',
+  'document.generate': 'Génération de document (PDF/Excel)',
+  'google.calendar.create_event': 'Création d\'événement (Google Agenda)',
+  'google.sheets.append_row': 'Mise à jour (Google Sheets)',
+  'email.send': 'Envoi d\'email'
+};
+const getReadableToolName = (tool) => TOOL_NAMES[tool] || tool;
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
@@ -233,7 +244,9 @@ export function ChatMessage({ message, onApprove }) {
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-md-tertiary-container text-md-tertiary"><ShieldCheck className="size-4" /></span>
               <div>
                 <h2 className="text-sm font-medium text-md-on-surface">Validation requise</h2>
-                <p className="mt-0.5 text-xs leading-5 text-md-on-surface-variant">L'agent souhaite exécuter <span className="font-mono text-[11px] text-md-primary bg-md-primary-container/50 px-1.5 py-0.5 rounded-full">{message.approval.tool}</span>.</p>
+                <p className="mt-0.5 text-xs leading-5 text-md-on-surface-variant">
+                  L'agent souhaite exécuter l'action suivante : <span className="font-medium text-md-primary bg-md-primary-container/30 px-2 py-0.5 rounded-full">{getReadableToolName(message.approval.tool)}</span>
+                </p>
               </div>
             </div>
             
