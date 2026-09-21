@@ -1,4 +1,11 @@
 id,product_code,name,unit_price
-1,WEB-ECOMM,E-commerce Website,5000.00
-2,MAINT-6,6 Months Maintenance,1200.00
-3,SEO-OPT,SEO Optimization,800.00
+1,WEB-SHOW,Création Site Vitrine,3000.00
+2,WEB-ECOMM,Création Site E-commerce,6000.00
+3,APP-MOB,Développement Application Mobile (iOS/Android),12000.00
+4,UI-UX,Design UI/UX sur mesure,4000.00
+5,SEO-OPT,Optimisation SEO complète,1500.00
+6,MAINT-12,Maintenance et Support technique (12 mois),2400.00
+7,HOST-12,Hébergement Cloud (12 mois),1200.00
+8,MGT-COMM,Community Management (par mois),2000.00
+9,CONSULT,Consulting IT (par heure),500.00
+10,AUDIT-IT,Audit de sécurité et architecture IT,3500.00

@@ -44,15 +44,28 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
     from backend.mcp.database.tools import get_services
 
     aliases = {
+        "vitrine": "WEB-SHOW",
+        "site_vitrine": "WEB-SHOW",
         "ecommerce": "WEB-ECOMM",
         "e-commerce": "WEB-ECOMM",
-        "ecommerce_website": "WEB-ECOMM",
-        "website_ecommerce": "WEB-ECOMM",
+        "mobile": "APP-MOB",
+        "application": "APP-MOB",
+        "app": "APP-MOB",
+        "ui": "UI-UX",
+        "ux": "UI-UX",
+        "design": "UI-UX",
         "seo": "SEO-OPT",
         "seo_optimization": "SEO-OPT",
-        "seo-optimization": "SEO-OPT",
-        "maintenance_6": "MAINT-6",
-        "maintenance_6_months": "MAINT-6",
+        "maintenance": "MAINT-12",
+        "support": "MAINT-12",
+        "hosting": "HOST-12",
+        "hebergement": "HOST-12",
+        "cloud": "HOST-12",
+        "community": "MGT-COMM",
+        "social": "MGT-COMM",
+        "consulting": "CONSULT",
+        "audit": "AUDIT-IT",
+        "security": "AUDIT-IT",
     }
 
     def normalize_code(code: str) -> str:
