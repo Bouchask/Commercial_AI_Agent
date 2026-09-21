@@ -290,3 +290,63 @@ def execute_sql_query(query: str, parameters: Optional[Dict[str, Any]] = None) -
         raise RuntimeError(f"SQL Execution failed: {str(e)}")
     finally:
         db.close()
+
+def create_service(name: str, unit_price: float, description: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new service in the catalogue."""
+    db = get_db_session()
+    try:
+        import uuid
+        code = f"SRV-{str(uuid.uuid4())[:8].upper()}"
+        service = Service(
+            code=code,
+            name=name,
+            description=description,
+            unit_price=float(unit_price)
+        )
+        db.add(service)
+        db.commit()
+        db.refresh(service)
+        return {
+            "status": "success",
+            "message": f"Service created successfully",
+            "service_id": service.id,
+            "code": service.code,
+            "name": service.name,
+            "unit_price": service.unit_price
+        }
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Failed to create service: {e}")
+    finally:
+        db.close()
+
+def update_service_price(service_identifier: Union[int, str], new_price: float) -> Dict[str, Any]:
+    """Update the price of an existing service by ID or name."""
+    db = get_db_session()
+    try:
+        service = None
+        if isinstance(service_identifier, int) or (isinstance(service_identifier, str) and service_identifier.isdigit()):
+            service = db.get(Service, int(service_identifier))
+        else:
+            service = db.query(Service).filter(Service.name.ilike(f"%{service_identifier}%")).first()
+            
+        if not service:
+            raise ValueError(f"Service '{service_identifier}' not found.")
+            
+        old_price = service.unit_price
+        service.unit_price = float(new_price)
+        db.commit()
+        db.refresh(service)
+        return {
+            "status": "success",
+            "message": f"Service price updated",
+            "service_id": service.id,
+            "name": service.name,
+            "old_price": old_price,
+            "new_price": service.unit_price
+        }
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Failed to update service price: {e}")
+    finally:
+        db.close()

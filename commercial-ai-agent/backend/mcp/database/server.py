@@ -63,7 +63,7 @@ def register_database_tools():
         )
     )
 
-    from backend.mcp.database.tools import create_quote, create_client, find_or_create_client, get_quote
+    from backend.mcp.database.tools import search_client, get_services, execute_sql_query, create_client, create_quote, get_quote, find_or_create_client, create_service, update_service_price, get_quote
     registry.register_tool(
         ToolSchema(
             name="db.create_quote",
@@ -151,5 +151,44 @@ def register_database_tools():
             risk_level="medium",
             requires_approval=True,
             handler=find_or_create_client
+        )
+    )
+
+    registry.register_tool(
+        ToolSchema(
+            name="db.create_service",
+            description="Create a new service in the catalogue with a specified name and price.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Name of the service."},
+                    "unit_price": {"type": "number", "description": "Unit price of the service."},
+                    "description": {"type": "string", "description": "Optional description of the service."}
+                },
+                "required": ["name", "unit_price"]
+            },
+            output_schema={"type": "object", "additionalProperties": True},
+            risk_level="medium",
+            requires_approval=True,
+            handler=create_service
+        )
+    )
+
+    registry.register_tool(
+        ToolSchema(
+            name="db.update_service_price",
+            description="Update the price of an existing service by ID or name.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "service_identifier": {"type": ["integer", "string"], "description": "Service ID or exact name to update."},
+                    "new_price": {"type": "number", "description": "New unit price for the service."}
+                },
+                "required": ["service_identifier", "new_price"]
+            },
+            output_schema={"type": "object", "additionalProperties": True},
+            risk_level="medium",
+            requires_approval=True,
+            handler=update_service_price
         )
     )

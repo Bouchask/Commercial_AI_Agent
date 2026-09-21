@@ -8,6 +8,8 @@ import { ExcelViewer } from "./ExcelViewer";
 const TOOL_NAMES = {
   'db.find_or_create_client': 'Recherche / Création de client',
   'db.create_quote': 'Création de devis',
+  'db.create_service': 'Création de service (Catalogue)',
+  'db.update_service_price': 'Mise à jour de prix (Catalogue)',
   'document.generate': 'Génération de document (PDF/Excel)',
   'google.calendar.create_event': 'Création d\'événement (Google Agenda)',
   'google.sheets.append_row': 'Mise à jour (Google Sheets)',
