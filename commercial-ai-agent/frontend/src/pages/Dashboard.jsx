@@ -43,22 +43,34 @@ const RECENT_CHATS = [
 ];
 
 /* ═══════════════════════════════════════════════════════
-   SIDEBAR — MD3 Navigation Drawer
+   SIDEBAR — Premium Dark Navigation
    ═══════════════════════════════════════════════════════ */
 function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadsheetId, conversations, activeThreadId, onSelectConversation }) {
+  const navItems = [
+    { id: 'clients', label: 'Clients', icon: UserRound, color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
+    { id: 'services', label: 'Services', icon: Settings, color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
+    { id: 'quotes', label: 'Devis', icon: FileText, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
+    { id: 'invoices', label: 'Factures', icon: Table, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    { id: 'assignments', label: 'Assignations', icon: Plus, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+  ];
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col bg-md-surface-container p-3 transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)] md:static md:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r border-white/6 p-3 transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)] md:static md:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
+      style={{ background: "rgba(8, 11, 20, 0.97)", backdropFilter: "blur(20px)" }}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between px-2 py-2">
-        <div className="flex items-center gap-2.5 text-sm font-medium text-md-on-surface">
-          <span className="grid size-8 place-items-center rounded-2xl bg-md-primary text-white shadow-sm">
-            <Sparkles className="size-4" />
-          </span>
-          Commercial AI
+      <div className="flex items-center justify-between px-2 py-3">
+        <div className="flex items-center gap-3">
+          <div className="grid size-9 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg shadow-violet-500/30">
+            <Sparkles className="size-4 text-white" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white leading-none tracking-tight">Commercial AI</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Propulsé par IA</div>
+          </div>
         </div>
         <button onClick={onClose} className="icon-button md:hidden" aria-label="Fermer le menu">
           <X className="size-4" />
@@ -72,29 +84,26 @@ function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadshee
       </button>
 
       {/* Navigation */}
-      <div className="mt-5 flex-1 overflow-y-auto px-1">
+      <div className="mt-5 flex-1 overflow-y-auto">
         <div className="sidebar-label">Navigation</div>
-        <div className="mt-1 space-y-1">
-          <button onClick={() => { setView('clients'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
-            <UserRound className="size-4 shrink-0" /> Clients
-          </button>
-          <button onClick={() => { setView('services'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
-            <Settings className="size-4 shrink-0" /> Services
-          </button>
-          <button onClick={() => { setView('quotes'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
-            <Bot className="size-4 shrink-0" /> Devis
-          </button>
-          <button onClick={() => { setView('invoices'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
-            <Table className="size-4 shrink-0" /> Factures
-          </button>
-          <button onClick={() => { setView('assignments'); if (window.innerWidth < 768) onClose(); }} className="sidebar-chat">
-            <Plus className="size-4 shrink-0" /> Assignations
-          </button>
+        <div className="mt-1 space-y-0.5">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { setView(item.id); if (window.innerWidth < 768) onClose(); }}
+              className="sidebar-chat group"
+            >
+              <span className={`grid size-7 shrink-0 place-items-center rounded-lg ${item.bg} border ${item.border} transition-all duration-200 group-hover:scale-105`}>
+                <item.icon className={`size-3.5 ${item.color}`} />
+              </span>
+              <span>{item.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Quick Access */}
         <div className="sidebar-label mt-5">Accès Rapide</div>
-        <div className="mt-1 space-y-1">
+        <div className="mt-1 space-y-0.5">
           <button
             onClick={() => {
               if (!spreadsheetId) {
@@ -104,57 +113,58 @@ function Sidebar({ open, onClose, onNewChat, user, onLogout, setView, spreadshee
               setView('sheets');
               if (window.innerWidth < 768) onClose();
             }}
-            className={`sidebar-chat ${
-              spreadsheetId
-                ? "bg-md-secondary-container/40 text-md-primary"
-                : "text-md-outline cursor-not-allowed"
-            }`}
+            className={`sidebar-chat group ${!spreadsheetId && "opacity-40 cursor-not-allowed"}`}
           >
-            <Table className="size-4 shrink-0" />
-            <span className="truncate">Base de Données (Sheets)</span>
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-green-500/10 border border-green-500/20">
+              <Table className="size-3.5 text-green-400" />
+            </span>
+            <span className="truncate">Base de Données</span>
+            {spreadsheetId && (
+              <span className="ml-auto flex size-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            )}
           </button>
         </div>
 
         {/* Recent Chats */}
         <div className="sidebar-label mt-5">Récentes</div>
-        <div className="mt-1 space-y-1">
+        <div className="mt-1 space-y-0.5">
           {conversations.map((chat) => (
-            <button 
-              key={chat.id} 
+            <button
+              key={chat.id}
               onClick={() => { onSelectConversation(chat.id); if (window.innerWidth < 768) onClose(); }}
               className={`sidebar-chat ${chat.id === activeThreadId ? "sidebar-chat-active" : ""}`}
             >
-              <Bot className="size-4 shrink-0" />
-              <span className="truncate">{chat.title || "Discussion"}</span>
+              <Bot className="size-3.5 shrink-0 text-slate-500" />
+              <span className="truncate text-xs">{chat.title || "Discussion"}</span>
             </button>
           ))}
           {conversations.length === 0 && (
-            <div className="text-xs text-md-on-surface-variant/60 px-3 py-2">
-              Aucune discussion
-            </div>
+            <div className="px-3 py-2 text-xs text-slate-600">Aucune discussion</div>
           )}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="space-y-1 border-t border-md-outline-variant/50 pt-3">
+      <div className="space-y-1 border-t border-white/6 pt-3">
         <button className="sidebar-chat">
-          <CircleHelp className="size-4" /> Aide
+          <CircleHelp className="size-4 text-slate-500" /> Aide
         </button>
-        <button className="sidebar-chat">
-          <Settings className="size-4" /> Paramètres
-        </button>
-        <button onClick={onLogout} className="mt-1 flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-sm text-md-on-surface-variant hover:bg-md-error/10 hover:text-md-error transition-all duration-200 active:scale-[0.98]">
-          <span className="grid size-8 place-items-center rounded-full bg-md-primary text-xs font-medium text-md-on-primary">
+        <button onClick={onLogout}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all duration-200 hover:bg-red-500/8 group"
+        >
+          <div className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-xs font-bold text-white shadow-lg shadow-violet-500/20">
             {user?.email?.[0]?.toUpperCase() || 'U'}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{user?.email || 'Utilisateur'}</span>
-          <span className="text-xs text-md-on-surface-variant/60">Déconnexion</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-medium text-slate-300 group-hover:text-white transition-colors">{user?.email || 'Utilisateur'}</div>
+            <div className="text-[10px] text-red-500/70 group-hover:text-red-400 transition-colors">Déconnexion</div>
+          </div>
         </button>
       </div>
     </aside>
   );
 }
+
 
 /* ═══════════════════════════════════════════════════════
    CLIENTS PANEL

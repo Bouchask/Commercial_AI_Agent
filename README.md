@@ -35,10 +35,20 @@ To maintain commercial safety, certain high-risk actions (like finalizing a quot
 
 ## 🚀 Getting Started
 
+The deployable application lives in `commercial-ai-agent/`. Its Vite frontend
+(`commercial-ai-agent/frontend`) is the canonical interface used by
+`vercel.json`. The separate `frontend/dashboard-app` directory is a legacy
+prototype and should not be deployed alongside it.
+
+Before a production deploy, configure secrets in the hosting provider instead
+of committing an `.env` file. Rotate any credential that may have appeared in
+Git history. GitHub Actions runs the backend tests and production frontend
+build on every push and pull request.
+
 ### 1. Backend Setup
 
 ```bash
-cd backend
+cd commercial-ai-agent/backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -53,7 +63,7 @@ python run.py
 ### 2. Frontend Setup
 
 ```bash
-cd frontend
+cd commercial-ai-agent/frontend
 npm install
 
 # Start the dev server
@@ -67,8 +77,9 @@ A dedicated python test suite validates the integrity of the `PromptEngineerAgen
 
 ```bash
 # Ensure you are at the project root with the venv active
+cd commercial-ai-agent
 export PYTHONPATH=.
-python backend/tests/test_agent_pipeline.py
+python -m pytest backend/tests
 ```
 
 ## 🛠️ Modifying Templates
