@@ -27,7 +27,7 @@ class PromptEngineerAgent:
             "meeting_date": "string (extracted target date for a meeting, e.g. '2026-10-10') or null",
             "meeting_time": "string (extracted target time for a meeting, e.g. '14:00') or null",
             "attachments": ["list of absolute file paths to attach, if provided in context"],
-            "actions": ["list of requested actions (e.g., db.find_or_create_client, utils.prepare_quote_items, db.create_quote, document.generate, email.send)"]
+            "actions": ["list of requested actions (e.g., db.find_or_create_client, utils.prepare_quote_items, db.create_quote, document.generate, email.send, db.create_service, db.update_service_price)"]
         }
         
         Rules:
@@ -38,7 +38,8 @@ class PromptEngineerAgent:
         - NEVER skip a requested service! If the user mentions "maintenance", "SEO", "website", etc., you MUST add every single one of them to the 'requirements' array.
         - If a duration is specified for a service (e.g., "12 mois de maintenance"), include the duration directly in the 'service' string (e.g., "12 months maintenance") so the planner knows exactly what was requested.
         - MEMORY & CONTEXT MERGING: If the user's request is an AMENDMENT or modification to a previous action (e.g., "add 15% discount", "change client to Google", "add SEO to the quote"), you MUST act as a short-term memory agent. Read the 'Previous Context' carefully, extract all previously requested 'requirements', the previous 'client', 'discount_percent', 'tax_rate', etc., and MERGE them with the user's new request to form a FULL, complete JSON intent. Do NOT output a JSON with only the new changes; output the entire previous state WITH the new changes applied. You can find the previous services in the 'items' array descriptions in Previous Context.
-        - The 'actions' array MUST ONLY contain combinations of the following exact strings: "db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote", "document.generate", "email.prepare", "email.send", "google.calendar.check_availability", "google.calendar.create_meeting", "google.sheets.append_row". NEVER invent tools like "update_quote" or "recalculate". To amend a quote, you just reuse the standard creation tools!
+        - The 'actions' array MUST ONLY contain combinations of the following exact strings: "db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote", "document.generate", "email.prepare", "email.send", "google.calendar.check_availability", "google.calendar.create_meeting", "google.sheets.append_row", "db.create_service", "db.update_service_price". NEVER invent tools like "update_quote".
+        - If the user explicitly asks to add a NEW service to the catalogue with a price, you MUST include "db.create_service". If they ask to update an existing service price, include "db.update_service_price".
         - If the user asks to schedule a meeting, you MUST add BOTH "google.calendar.check_availability" AND "google.calendar.create_meeting" to the 'actions' array, in that exact order.
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
         - If the Previous Context shows a quote/document was already generated, and the user just asks to send it via email, DO NOT include quote creation actions (like db.create_quote, document.generate) UNLESS they explicitly request a different document format (e.g. they ask for PDF). If they just want to send the existing one, ONLY include email actions (email.prepare, email.send) and put the previously generated file_path in "attachments".

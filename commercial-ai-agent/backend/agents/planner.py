@@ -38,7 +38,10 @@ class PlannerAgent:
         - You MUST pass 'discount_percent' and 'tax_rate' to 'utils.prepare_quote_items' if they are provided in the Intent.
         - PAY CLOSE ATTENTION to durations requested by the user. If the Intent 'requirements' has a 'duration_months' (e.g. 12) and the catalogue service has a fixed duration (like "MAINT-6" which is 6 months), YOU MUST DIVIDE: 12 / 6 = 2! You MUST then set the quantity in the 'quantities' argument to this calculated multiplier (e.g., {"MAINT-6": 2}). DO NOT skip a service and DO NOT leave the quantity as 1!
         - IMPORTANT: If you adjusted a quantity to match a duration (like the 12 months maintenance example above), you MUST ALSO pass a 'custom_descriptions' dictionary to 'utils.prepare_quote_items' to override the default catalogue name on the invoice (e.g., {"MAINT-6": "12 Months Maintenance"}) so the client sees exactly what they asked for!
-        - Use only actual catalogue codes returned by the tool descriptions: WEB-ECOMM, MAINT-6, SEO-OPT. Never invent a price or a service.
+        - Use only actual catalogue codes returned by the tool descriptions: WEB-ECOMM, MAINT-6, SEO-OPT. Never invent a price or a service UNLESS the intent explicitly lists 'db.create_service', in which case you MUST use 'db.create_service' to create it first!
+        - If the Intent includes 'db.create_service', pass 'name', 'unit_price', and an optional 'description'. Wait for the service to be created.
+        - If you create a service, you MUST pass its returned code into 'utils.prepare_quote_items' using a placeholder like "{{stepN.code}}" inside the 'codes' array (e.g., ["{{step1.code}}"]).
+        - If the Intent includes 'db.update_service_price', pass 'service_identifier' (name or ID) and 'new_price'.
         - PLACEHOLDER FORMAT: To reference output from a previous step, you MUST use EXACTLY this format: "{{stepN.key}}" where N is the integer step ID. The word "step" is MANDATORY.
           - CORRECT: "{{step1.id}}", "{{step3.items}}", "{{step3.total_ht}}"
           - WRONG: "{{1.id}}", "{{3.items}}", "{{items}}"
