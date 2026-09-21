@@ -116,7 +116,6 @@ def find_or_create_client(name: str, email: Optional[str] = None, phone: Optiona
     finally:
         db.close()
 
-@lru_cache(maxsize=1)
 def _fetch_all_services_from_db():
     db = get_db_session()
     try:
