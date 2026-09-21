@@ -1,7 +1,6 @@
 from backend.mcp.registry import registry
 from backend.mcp.schemas import ToolSchema
-from backend.mcp.database.tools import search_client, get_services
-
+from backend.mcp.database.tools import search_client, get_services, execute_sql_query, create_client, create_quote, get_quote, find_or_create_client, create_service, update_service_price
 def register_database_tools():
     registry.register_tool(
         ToolSchema(
@@ -63,7 +62,7 @@ def register_database_tools():
         )
     )
 
-    from backend.mcp.database.tools import search_client, get_services, execute_sql_query, create_client, create_quote, get_quote, find_or_create_client, create_service, update_service_price, get_quote
+
     registry.register_tool(
         ToolSchema(
             name="db.create_quote",
