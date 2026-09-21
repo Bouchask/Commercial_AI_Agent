@@ -23,6 +23,14 @@
       "destination": "/api/index.py"
     },
     {
+      "source": "/privacy",
+      "destination": "/frontend/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/frontend/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/frontend/$1"
     }
