@@ -1,5 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import Login from './pages/Login';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 
 // The dashboard contains the commercial workspace and its heavier UI
 // dependencies. Loading it only after authentication keeps the login page
@@ -26,6 +28,14 @@ function App() {
     setToken(null);
     setUser(null);
   };
+
+  if (window.location.pathname === '/privacy') {
+    return <Privacy />;
+  }
+
+  if (window.location.pathname === '/terms') {
+    return <Terms />;
+  }
 
   if (!token) {
     return <Login onLoginSuccess={handleLogin} />;
