@@ -66,8 +66,17 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
     custom_descriptions = custom_descriptions or {}
     normalized_codes = [normalize_code(code) for code in codes]
     code_counts = Counter(normalized_codes)
+    
+    print(f"[DEBUG] prepare_quote_items requested normalized_codes: {normalized_codes}")
+    
     services = get_services(list(code_counts.keys()))
+    
+    print(f"[DEBUG] prepare_quote_items got services from DB: {[s.get('code') for s in services]}")
+    
     if not services:
+        # Also let's print ALL services to see if it's there
+        all_s = get_services()
+        print(f"[DEBUG] ALL services in DB: {[s.get('code') for s in all_s]}")
         raise ValueError(f"No catalogue products match the requested codes: {', '.join(codes)}")
         
     items = []

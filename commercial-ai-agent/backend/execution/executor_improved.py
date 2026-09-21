@@ -388,18 +388,21 @@ class ExecutionEngine:
         resolved = {}
         
         for key, value in arguments.items():
+            # Also resolve the key if it's a template string
+            resolved_key = self._substitute_templates(key, prior_results) if isinstance(key, str) else key
+            
             if isinstance(value, str):
                 # Replace {{stepN.field}} patterns
-                resolved[key] = self._substitute_templates(value, prior_results)
+                resolved[resolved_key] = self._substitute_templates(value, prior_results)
             elif isinstance(value, dict):
-                resolved[key] = self._resolve_arguments(value, prior_results)
+                resolved[resolved_key] = self._resolve_arguments(value, prior_results)
             elif isinstance(value, list):
-                resolved[key] = [
+                resolved[resolved_key] = [
                     self._substitute_templates(v, prior_results) if isinstance(v, str) else v
                     for v in value
                 ]
             else:
-                resolved[key] = value
+                resolved[resolved_key] = value
         
         return resolved
     
