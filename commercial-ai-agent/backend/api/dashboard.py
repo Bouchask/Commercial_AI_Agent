@@ -141,6 +141,18 @@ def list_quotes():
         q = db.query(Quote).join(Client).filter(Client.owner_user_id == request.current_user.id).order_by(Quote.created_at.desc()).limit(limit).offset(offset).all() if not _is_admin() else db.query(Quote).order_by(Quote.created_at.desc()).limit(limit).offset(offset).all()
         out = []
         for quote in q:
+            items_out = []
+            for qi in quote.items:
+                items_out.append({
+                    "id": qi.id,
+                    "service_id": qi.service_id,
+                    "service_name": qi.service.name if qi.service else None,
+                    "service_code": qi.service.code if qi.service else None,
+                    "quantity": qi.quantity,
+                    "unit_price": qi.unit_price,
+                    "tax_rate": qi.tax_rate,
+                    "discount": getattr(qi, "discount", 0.0)
+                })
             out.append({
                 "id": quote.id,
                 "quote_number": quote.quote_number,
@@ -149,7 +161,8 @@ def list_quotes():
                 "subtotal": quote.subtotal,
                 "tax_total": quote.tax_total,
                 "total_amount": quote.total_amount,
-                "created_at": quote.created_at.isoformat() if quote.created_at else None
+                "created_at": quote.created_at.isoformat() if quote.created_at else None,
+                "items": items_out
             })
         return jsonify(out)
     finally:
@@ -198,10 +211,34 @@ def list_invoices():
     db = SessionLocal()
     try:
         invoices = db.query(Invoice).join(Client).filter(Client.owner_user_id == request.current_user.id).order_by(Invoice.created_at.desc()).limit(50).all() if not _is_admin() else db.query(Invoice).order_by(Invoice.created_at.desc()).limit(50).all()
-        return jsonify([
-            {"id": inv.id, "invoice_number": inv.invoice_number, "client_id": inv.client_id, "total_amount": inv.total_amount, "status": inv.status}
-            for inv in invoices
-        ])
+        out = []
+        for inv in invoices:
+            items_out = []
+            for ii in inv.items:
+                items_out.append({
+                    "id": ii.id,
+                    "service_id": ii.service_id,
+                    "service_name": ii.service.name if ii.service else None,
+                    "service_code": ii.service.code if ii.service else None,
+                    "quantity": ii.quantity,
+                    "unit_price": ii.unit_price,
+                    "tax_rate": ii.tax_rate,
+                    "discount": getattr(ii, "discount", 0.0)
+                })
+            out.append({
+                "id": inv.id,
+                "invoice_number": inv.invoice_number,
+                "client_id": inv.client_id,
+                "status": inv.status,
+                "subtotal": inv.subtotal,
+                "tax_total": inv.tax_total,
+                "total_amount": inv.total_amount,
+                "is_paid": inv.is_paid,
+                "created_at": inv.created_at.isoformat() if inv.created_at else None,
+                "due_date": inv.due_date.isoformat() if inv.due_date else None,
+                "items": items_out
+            })
+        return jsonify(out)
     finally:
         db.close()
 
