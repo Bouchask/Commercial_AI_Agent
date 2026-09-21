@@ -44,8 +44,8 @@ class PromptEngineerAgent:
         - If the user asks to schedule a meeting, you MUST add BOTH "google.calendar.check_availability" AND "google.calendar.create_meeting" to the 'actions' array, in that exact order.
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
         - If the Previous Context shows a quote/document was already generated, and the user just asks to send it via email, DO NOT include quote creation actions (like db.create_quote, document.generate) UNLESS they explicitly request a different document format (e.g. they ask for PDF). If they just want to send the existing one, ONLY include email actions (email.prepare, email.send) and put the previously generated file_path in "attachments".
+        - CRITICAL RULE: If the user is only asking an informational question (e.g., "what are the main services for a website", "how much does X cost", "give me options"), DO NOT add ANY actions to the 'actions' array! Leave "actions": [] empty. DO NOT create a quote, DO NOT create a client, and DO NOT log to Google Sheets unless the user explicitly requested the creation of a document or scheduling a meeting. The Conversational Agent will reply to the question naturally.
         """
-
     def analyze(self, user_input: str, previous_context: str = "", user_info: str = "") -> Dict[str, Any]:
         """
         Analyzes raw user input and returns a structured JSON intent.
