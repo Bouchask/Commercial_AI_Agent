@@ -217,10 +217,10 @@ def create_app():
             logger.warning("Google token exchange did not return an OpenID token")
             return jsonify({"error": "Google sign-in did not return an identity token. Please try again."}), 400
         
-        # Verify that the user checked the boxes for Calendar and Sheets
-        if "calendar" not in granted_scopes.lower() or "spreadsheets" not in granted_scopes.lower():
+        # Verify that the user checked the boxes for Calendar, Sheets, and Gmail
+        if "calendar" not in granted_scopes.lower() or "spreadsheets" not in granted_scopes.lower() or "gmail" not in granted_scopes.lower():
             return jsonify({
-                "error": "Autorisations manquantes. Vous DEVEZ cocher les cases pour Google Agenda et Google Sheets lors de la connexion."
+                "error": "Autorisations manquantes. Vous DEVEZ cocher les cases pour Google Agenda, Google Sheets et Gmail lors de la connexion."
             }), 403
         
         

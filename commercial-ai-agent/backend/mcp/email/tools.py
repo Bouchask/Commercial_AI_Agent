@@ -3,6 +3,9 @@ import os
 import re
 import time
 import ssl
+import base64
+from googleapiclient.discovery import build
+from backend.mcp.google_auth import get_user_google_credentials
 
 
 def _validate_attachment_path(filepath: str) -> str:
@@ -64,17 +67,12 @@ def send_email(
     body: str, 
     attachments: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    """Actually send the email using SMTP."""
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    smtp_user = os.getenv("SMTP_USERNAME")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
-    
-    if not smtp_user or not smtp_pass:
-        raise ValueError("SMTP credentials are not configured in environment.")
+    # Check for Google credentials first
+    creds = get_user_google_credentials()
+    used_gmail = False
 
     msg = MIMEMultipart()
-    msg['From'] = smtp_user
+    # We will set the 'From' field later depending on the method
     msg['To'] = to
     msg['Subject'] = subject
 
@@ -94,6 +92,43 @@ def send_email(
     if not re.match(r"[^@]+@[^@]+\.[^@]+", to.strip()):
         raise ValueError(f"Invalid email format: {to}")
 
+    # Method 1: Try Gmail API if authenticated
+    if creds:
+        try:
+            service = build('gmail', 'v1', credentials=creds)
+            # We don't set 'From' manually here, Gmail infers it from the authenticated user,
+            # but we can set it to 'me'.
+            msg['From'] = 'me'
+            
+            raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+            body_payload = {'raw': raw_message}
+            
+            sent_message = service.users().messages().send(userId='me', body=body_payload).execute()
+            
+            return {
+                "status": "success",
+                "message": "Email sent successfully via Gmail",
+                "method": "gmail",
+                "id": sent_message.get('id')
+            }
+        except Exception as e:
+            print(f"Gmail API failed, falling back to SMTP: {e}")
+            # Fall through to SMTP if Gmail fails
+
+    # Method 2: Fallback to SMTP
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+    
+    if not smtp_user or not smtp_pass:
+        if creds:
+            raise ValueError("Failed to send via Gmail API, and SMTP credentials are not configured as fallback.")
+        else:
+            raise ValueError("Google authentication not found, and SMTP credentials are not configured in environment.")
+
+    msg.replace_header('From', smtp_user) if 'From' in msg else msg.add_header('From', smtp_user)
+
     try:
         context = ssl.create_default_context()
         
@@ -106,21 +141,17 @@ def send_email(
                 server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
                 server.starttls(context=context)
                 server.login(smtp_user, smtp_pass)
-                text = msg.as_string()
-                server.sendmail(smtp_user, to, text)
+                server.send_message(msg)
                 server.quit()
-                
                 return {
-                    "status": "sent",
-                    "to": to,
-                    "subject": subject,
-                    "attachments_count": len(attachments) if attachments else 0,
-                    "message": "Email successfully sent."
+                    "status": "success",
+                    "message": "Email sent successfully via SMTP fallback",
+                    "method": "smtp"
                 }
             except smtplib.SMTPException as e:
                 last_error = e
                 if attempt < max_retries - 1:
-                    time.sleep(base_delay * (2 ** attempt)) # Exponential backoff
+                    time.sleep(base_delay * (2 ** attempt))
             except Exception as e:
                 # For non-SMTP errors (like network unreachable), also retry
                 last_error = e

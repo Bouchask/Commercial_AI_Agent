@@ -13,7 +13,7 @@ export default function Login({ onLoginSuccess }) {
 
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
-    scope: 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar',
+    scope: 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send',
     prompt: 'consent',
     onSuccess: async (codeResponse) => {
       setIsGoogleLoading(true);
