@@ -209,13 +209,13 @@ L'application utilise le protocole **MCP (Model Context Protocol)** pour structu
 | Outil | Description | Approbation |
 |-------|-------------|-------------|
 | `db.search_client` | Recherche un client par nom | ❌ |
-| `db.find_or_create_client` | Trouve ou crée automatiquement un client ⭐ | ❌ |
-| `db.create_client` | Crée un nouveau client | ❌ |
+| `db.find_or_create_client` | Trouve ou crée automatiquement un client ⭐ | ✅ |
+| `db.create_client` | Crée un nouveau client | ✅ |
 | `db.get_services` | Récupère le catalogue des services | ❌ |
-| `db.create_quote` | Crée un devis avec lignes d'articles | ❌ |
+| `db.create_quote` | Crée un devis avec lignes d'articles | ✅ |
 | `db.get_quote` | Récupère les détails d'un devis | ❌ |
-| `db.create_service` | Ajoute un service au catalogue (avec prix) | ❌ |
-| `db.update_service_price` | Met à jour le prix d'un service existant | ❌ |
+| `db.create_service` | Ajoute un service au catalogue (avec prix) | ✅ |
+| `db.update_service_price` | Met à jour le prix d'un service existant | ✅ |
 
 #### 📄 Outils Document (2 outils)
 | Outil | Description | Approbation |
