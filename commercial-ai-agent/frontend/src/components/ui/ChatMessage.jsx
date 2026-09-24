@@ -210,6 +210,148 @@ export function ChatMessage({ message, onApprove }) {
     );
   };
 
+  /* ── Client / Email Selection Preview (MD3 Card) ── */
+  const ClientApprovalPreview = ({ args, onApprove, approvalObj }) => {
+    const [fetchedClients, setFetchedClients] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedEmail, setSelectedEmail] = useState(args.email || "");
+    const [isCustomEmail, setIsCustomEmail] = useState(false);
+
+    useEffect(() => {
+      let active = true;
+      const token = localStorage.getItem('auth_token');
+      fetch(`${API_BASE_URL}/api/clients`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!active) return;
+        const matches = (data || []).filter(c => c.name?.toLowerCase().includes((args.name || '').toLowerCase()));
+        
+        // Extract unique emails from matched clients
+        const uniqueEmails = [];
+        const seen = new Set();
+        matches.forEach(m => {
+          if (m.email && !seen.has(m.email.toLowerCase())) {
+            seen.add(m.email.toLowerCase());
+            uniqueEmails.push(m.email);
+          }
+        });
+        
+        setFetchedClients(uniqueEmails);
+        
+        // Auto-select behavior
+        if (!args.email) {
+          if (uniqueEmails.length === 1) {
+            setSelectedEmail(uniqueEmails[0]);
+          } else if (uniqueEmails.length === 0) {
+            setIsCustomEmail(true);
+          }
+        }
+        setLoading(false);
+      })
+      .catch(() => { if (active) setLoading(false); });
+      
+      return () => { active = false; };
+    }, [args.name, args.email]);
+
+    const handleApprove = (isApproved) => {
+      const newArgs = { ...args };
+      if (selectedEmail && isApproved) {
+        newArgs.email = selectedEmail;
+      }
+      onApprove({ ...approvalObj, arguments: newArgs }, isApproved);
+    };
+
+    if (approvalObj.status && approvalObj.status !== "pending") {
+      // If already approved/rejected, just show the final data
+      return (
+        <div className="mt-4 rounded-2xl bg-md-surface-container-high/50 border border-md-outline-variant/20 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-md-outline-variant/20 bg-md-surface-container-high/40 text-[10px] font-medium text-md-on-surface-variant uppercase tracking-wider flex justify-between items-center">
+            <span>Données de la requête (Client)</span>
+          </div>
+          <div className="p-4 grid gap-1 text-[13px]">
+            {Object.entries(args).map(([key, value]) => (
+              <div key={key} className="flex flex-col sm:flex-row sm:items-start gap-1 py-1.5 border-b border-md-outline-variant/10 last:border-0">
+                <div className="text-md-on-surface-variant font-medium sm:w-1/3 shrink-0">{key}</div>
+                <div className="text-md-on-surface break-words flex-1">{renderValue(value)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-4 rounded-3xl bg-md-surface-container overflow-hidden text-[13px] shadow-sm border border-md-outline-variant/20">
+        <div className="p-4 border-b border-md-outline-variant/20 bg-md-primary-container/20">
+          <h4 className="font-medium text-sm text-md-on-surface mb-1">Sélection de l'email pour le client : {args.name}</h4>
+          <p className="text-xs text-md-on-surface-variant">L'agent a besoin d'une adresse e-mail pour continuer. Veuillez choisir ou saisir un e-mail.</p>
+        </div>
+        <div className="p-4 flex flex-col gap-3">
+          {loading ? (
+            <div className="text-xs text-md-on-surface-variant animate-pulse">Recherche des adresses existantes...</div>
+          ) : (
+            <>
+              {fetchedClients.length > 0 && (
+                <div className="flex flex-col gap-2 mb-2">
+                  <span className="text-xs font-medium text-md-on-surface-variant uppercase tracking-wider">Adresses trouvées en base :</span>
+                  {fetchedClients.map((email, idx) => (
+                    <label key={idx} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedEmail === email && !isCustomEmail ? 'bg-md-primary-container/30 border-md-primary' : 'bg-white/5 border-md-outline-variant/30 hover:bg-white/10'}`}>
+                      <input 
+                        type="radio" 
+                        name="client-email" 
+                        className="accent-md-primary"
+                        checked={selectedEmail === email && !isCustomEmail}
+                        onChange={() => { setSelectedEmail(email); setIsCustomEmail(false); }}
+                      />
+                      <span className="font-medium">{email}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-medium text-md-on-surface-variant uppercase tracking-wider">Ou utiliser une autre adresse :</span>
+                <label className={`flex flex-col gap-2 p-3 rounded-xl border transition-colors ${isCustomEmail ? 'bg-md-primary-container/30 border-md-primary' : 'bg-white/5 border-md-outline-variant/30'}`}>
+                  <div className="flex items-center gap-3 cursor-pointer" onClick={() => setIsCustomEmail(true)}>
+                    <input 
+                      type="radio" 
+                      name="client-email" 
+                      className="accent-md-primary"
+                      checked={isCustomEmail}
+                      onChange={() => setIsCustomEmail(true)}
+                    />
+                    <span className="font-medium">Nouvel e-mail</span>
+                  </div>
+                  {isCustomEmail && (
+                    <input 
+                      type="email" 
+                      placeholder="exemple@domaine.com"
+                      className="mt-2 w-full p-2 text-sm bg-md-surface-container rounded-lg border border-md-outline-variant/50 focus:border-md-primary focus:outline-none"
+                      value={selectedEmail === '' || fetchedClients.includes(selectedEmail) && isCustomEmail ? '' : selectedEmail}
+                      onChange={(e) => setSelectedEmail(e.target.value)}
+                      autoFocus
+                    />
+                  )}
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+        
+        <div className="p-4 bg-md-surface-container-low/50 flex gap-2 justify-end border-t border-md-outline-variant/20">
+           <button onClick={() => handleApprove(false)} className="inline-flex items-center gap-1.5 rounded-full border border-md-outline bg-transparent px-4 py-1.5 text-xs font-medium text-md-on-surface hover:bg-md-primary/5">
+             <X className="size-3.5" /> Refuser
+           </button>
+           <button onClick={() => handleApprove(true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-4 py-1.5 text-xs font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90">
+             <Check className="size-3.5" /> Approuver avec cet email
+           </button>
+        </div>
+      </div>
+    );
+  };
+
   /* ── Agent Message ── */
   return (
     <article className="flex gap-3 py-4 sm:gap-4 sm:py-5">
@@ -322,6 +464,8 @@ export function ChatMessage({ message, onApprove }) {
               renderCalendarPreview(message.approval.arguments)
             ) : message.approval.tool === 'google.sheets.append_row' && message.approval.arguments ? (
               renderSheetsPreview(message.approval.arguments)
+            ) : message.approval.tool === 'db.find_or_create_client' && message.approval.arguments ? (
+              <ClientApprovalPreview args={message.approval.arguments} onApprove={onApprove} approvalObj={message.approval} />
             ) : (
               <div className="mt-4 rounded-2xl bg-md-surface-container-high/50 border border-md-outline-variant/20 overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-md-outline-variant/20 bg-md-surface-container-high/40 text-[10px] font-medium text-md-on-surface-variant uppercase tracking-wider flex justify-between items-center">
@@ -339,26 +483,28 @@ export function ChatMessage({ message, onApprove }) {
             )}
 
             {/* ── Action Buttons or Status Badge (MD3 Pill) ── */}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {!message.approval.status || message.approval.status === "pending" ? (
-                <>
-                  <button onClick={() => onApprove(message.approval, true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-5 py-2 text-[13px] font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90 hover:shadow-md transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
-                    <Check className="size-3.5" /> Approuver
-                  </button>
-                  <button onClick={() => onApprove(message.approval, false)} className="inline-flex items-center gap-1.5 rounded-full border border-md-outline bg-transparent px-5 py-2 text-[13px] font-medium text-md-on-surface hover:bg-md-primary/5 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
-                    <X className="size-3.5" /> Refuser
-                  </button>
-                </>
-              ) : message.approval.status === "approved" ? (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100/50 border border-green-500/30 px-5 py-2 text-[13px] font-medium text-green-700 shadow-sm">
-                  <Check className="size-3.5" /> Action approuvée
-                </div>
-              ) : (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-red-100/50 border border-red-500/30 px-5 py-2 text-[13px] font-medium text-red-700 shadow-sm">
-                  <X className="size-3.5" /> Action refusée
-                </div>
-              )}
-            </div>
+            {(!message.approval.status || message.approval.status === "pending") && message.approval.tool === 'db.find_or_create_client' ? null : (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {!message.approval.status || message.approval.status === "pending" ? (
+                  <>
+                    <button onClick={() => onApprove(message.approval, true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-5 py-2 text-[13px] font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90 hover:shadow-md transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
+                      <Check className="size-3.5" /> Approuver
+                    </button>
+                    <button onClick={() => onApprove(message.approval, false)} className="inline-flex items-center gap-1.5 rounded-full border border-md-outline bg-transparent px-5 py-2 text-[13px] font-medium text-md-on-surface hover:bg-md-primary/5 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95">
+                      <X className="size-3.5" /> Refuser
+                    </button>
+                  </>
+                ) : message.approval.status === "approved" ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100/50 border border-green-500/30 px-5 py-2 text-[13px] font-medium text-green-700 shadow-sm">
+                    <Check className="size-3.5" /> Action approuvée
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-red-100/50 border border-red-500/30 px-5 py-2 text-[13px] font-medium text-red-700 shadow-sm">
+                    <X className="size-3.5" /> Action refusée
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
       </div>
