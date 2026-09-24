@@ -89,12 +89,24 @@ def find_or_create_client(name: str, email: Optional[str] = None, phone: Optiona
                     query = query.filter(Client.owner_user_id == user.id)
         except RuntimeError:
             pass
-        existing = query.first()
+            
+        existing = None
+        if email:
+            existing = query.filter(Client.email.ilike(email)).first()
+            if not existing:
+                existing = query.first()
+                if existing:
+                    existing.email = email
+                    db.commit()
+                    db.refresh(existing)
+        else:
+            existing = query.first()
+            
         if existing:
             return {
                 "id": existing.id,
                 "name": existing.name,
-                "email": existing.email or email,
+                "email": existing.email,
                 "phone": existing.phone or phone,
                 "address": existing.address or address
             }
