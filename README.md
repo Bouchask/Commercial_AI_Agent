@@ -205,7 +205,7 @@ Réponse finale
 
 ### Outils MCP
 
-L'application utilise le protocole **MCP (Model Context Protocol)** pour structurer les capacités de l'agent en outils réutilisables. Il y a **17 outils** répartis en 5 catégories :
+L'application utilise le protocole **MCP (Model Context Protocol)** pour structurer les capacités de l'agent en outils réutilisables. Il y a **18 outils** répartis en 6 catégories :
 
 #### 🗄️ Outils Base de Données (8 outils)
 | Outil | Description | Approbation |
@@ -237,12 +237,17 @@ L'application utilise le protocole **MCP (Model Context Protocol)** pour structu
 | `google.calendar.check_availability` | Vérifie les disponibilités | ❌ |
 | `google.calendar.create_meeting` | Crée un événement Google Calendar | ✅ |
 
-#### 📊 Google Sheets (3 outils)
+#### 📊 Google Sheets (2 outils)
 | Outil | Description | Approbation |
 |-------|-------------|-------------|
 | `google.sheets.append_row` | Ajoute une ligne dans le Sheets CRM | ✅ |
-| `google.sheets.get_data` | Récupère les données du Sheets | ❌ |
-| `google.sheets.create_spreadsheet` | Crée un nouveau Google Sheets | ✅ |
+| `spreadsheet.search` | Recherche des données dans un Google Sheets | ❌ |
+
+#### 🛠️ Utilitaires (2 outils)
+| Outil | Description | Approbation |
+|-------|-------------|-------------|
+| `utils.calculate` | Évalue une expression mathématique | ❌ |
+| `utils.prepare_quote_items` | Prépare les lignes, calcule la TVA et les totaux d'un devis | ❌ |
 
 > **Note sur les approbations :** Les actions à ✅ nécessitent une confirmation explicite de l'utilisateur dans l'interface avant d'être exécutées. C'est une mesure de sécurité qui garantit que l'agent n'envoie jamais d'emails ou ne crée jamais de fichiers sans votre accord.
 
