@@ -153,7 +153,8 @@ backend/
 | `POST` | `/api/auth/google` | Échange le code OAuth Google contre un JWT |
 | `GET` | `/api/auth/google/config` | Retourne le `client_id` Google pour le frontend |
 | `POST` | `/api/login` | Connexion email/mot de passe |
-| `POST` | `/api/approve` | **Point d'entrée principal** — envoie un message à l'agent |
+| `POST` | `/api/chat` | Point d'entrée principal — envoie un message à l'agent |
+| `POST` | `/api/approve` | Valide ou modifie (ex: choix d'e-mail) une action en attente |
 | `GET` | `/api/clients` | Liste tous les clients |
 | `POST` | `/api/clients` | Crée un nouveau client |
 | `GET` | `/api/quotes` | Liste tous les devis (avec items) |
@@ -182,6 +183,7 @@ User Input
 [2] PlannerAgent
     │  Transforme l'intent en plan d'exécution séquentiel
     │  Identifie les étapes nécessitant une approbation humaine
+    │  Gère les dépendances entre étapes via des variables dynamiques (ex: {{stepN.email}}) avec fallback intelligent
     │
     ▼
 [3] ExecutionEngine
@@ -342,8 +344,8 @@ Le design utilise un thème **sombre premium** inspiré des meilleurs SaaS (Line
 - **Détail** (droite) : Sélectionnez un client pour voir ses réunions (depuis Google Sheets), devis (avec toutes les lignes d'articles, remises, TVA) et factures
 
 #### Système d'Approbation
-Quand l'agent veut effectuer une action irréversible (envoyer un email, créer un PDF, écrire dans Sheets), il suspende l'exécution et affiche une **Approval Card** dans le chat. L'utilisateur peut :
-- ✅ **Approuver** → l'action s'exécute
+Quand l'agent veut effectuer une action irréversible (envoyer un email, créer un PDF, écrire dans Sheets), il suspend l'exécution et affiche une **Approval Card** dans le chat. L'utilisateur peut :
+- ✅ **Approuver** → l'action s'exécute. L'interface permet la **modification à la volée** des données avant l'approbation (ex: choix, saisie et validation stricte d'une adresse e-mail) qui sont réinjectées dynamiquement dans le plan de l'agent.
 - ❌ **Rejeter** → l'action est annulée
 
 ---
