@@ -9,3 +9,7 @@ id,product_code,name,unit_price
 8,MGT-COMM,Community Management (par mois),2000.00
 9,CONSULT,Consulting IT (par heure),500.00
 10,AUDIT-IT,Audit de sécurité et architecture IT,3500.00
+11,PACK-WEB,Pack Site Web Complet (Conception + Dev + Hébergement),4000.00
+12,PACK-MOB,Pack App Mobile Complète (UI/UX + Dev + Hébergement),15000.00
+13,PACK-DESK,Pack App Desktop (Conception + Dev),10000.00
+14,PACK-ECOMM,Pack E-commerce Complet (UI/UX + Dev + Héb. 1an + SEO),9000.00

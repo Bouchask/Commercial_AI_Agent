@@ -18,6 +18,10 @@ class ResponseAgent:
         Correct: [Ouvrir l'événement dans Google Agenda](https://www.google.com/calendar/event?eid=...)
         Incorrect: https://www.google.com/calendar/event?eid=...
         
+        LOGIQUE COMMERCIALE (PACKS VS SÉPARÉ):
+        - Si le client exprime le besoin de créer un projet en partant de zéro (ex: "je veux créer un site web", "je veux lancer une application"), proposez-lui en priorité nos PACKS COMPLETS (ex: PACK-WEB, PACK-MOB, PACK-DESK, PACK-ECOMM) car ils incluent tout le nécessaire (conception, dev, hébergement).
+        - Si le client indique qu'il a déjà un projet existant et cherche à l'améliorer ou le mettre à jour (ex: "j'ai déjà une app", "refonte", "mise à jour"), proposez-lui plutôt les SERVICES SÉPARÉS à la carte (ex: UI-UX seul, SEO-OPT seul, MAINT-12).
+        
         Use the language of the initial user request, or French if uncertain, as this is a Moroccan/French context (MAD currency).
         """
 
