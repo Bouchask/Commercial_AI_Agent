@@ -51,7 +51,7 @@ class PromptEngineerAgent:
         """
         Analyzes raw user input and returns a structured JSON intent.
         """
-        prompt = f"Connected User Info (Use this as default client if no client is specified): {user_info}\n\nPrevious Context (use this to find file paths for attachments):\n{previous_context}\n\nUser request: {user_input}"
+        prompt = f"Connected User Info (Use this as default client if no client is specified): {user_info}\n\nPrevious Context (Recent conversation history & proposed services):\n{previous_context}\n\nUser request: {user_input}"
         # We use commercial_reasoning capability for accurate intent extraction
         return self.router.generate_json(
             capability="commercial_reasoning",
