@@ -335,7 +335,7 @@ class LangGraphOrchestrator:
                 
         return self._format_response(result_state, execution_id)
 
-    def process_approval(self, execution_id: str, step_id: int, approved: bool, user_id: int = None) -> Dict[str, Any]:
+    def process_approval(self, execution_id: str, step_id: int, approved: bool, user_id: int = None, arguments: Dict[str, Any] = None) -> Dict[str, Any]:
         if user_id is None:
             raise PermissionError("Authenticated user is required")
         self._assert_execution_owner(execution_id, user_id)
@@ -358,8 +358,22 @@ class LangGraphOrchestrator:
             if step_id not in approved_steps:
                 approved_steps.append(step_id)
             
-            # Update the graph state with the new approved steps
-            self.graph.update_state(config, {"approved_step_ids": approved_steps})
+            update_data = {"approved_step_ids": approved_steps}
+            
+            if arguments is not None:
+                plan = state.get("plan")
+                if plan:
+                    # Make a deep copy to ensure state update triggers correctly
+                    import copy
+                    new_plan = copy.deepcopy(plan)
+                    for step in new_plan.get("steps", []):
+                        if step.get("id") == step_id:
+                            step["arguments"] = arguments
+                            break
+                    update_data["plan"] = new_plan
+
+            # Update the graph state with the new approved steps and plan
+            self.graph.update_state(config, update_data)
             
             # Resume execution (it will enter 'wait_for_approval' and then loop to 'execute')
             result_state = self.graph.invoke(None, config)

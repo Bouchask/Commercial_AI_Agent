@@ -405,6 +405,7 @@ def create_app():
                 data.step_id,
                 data.approved,
                 user_id=request.current_user.id,
+                arguments=data.arguments
             )
             return jsonify(result)
         except PermissionError:

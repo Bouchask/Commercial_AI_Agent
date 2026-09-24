@@ -78,6 +78,10 @@ class ApproveRequest(BaseModel):
         ...,
         description="Approval decision (true to approve, false to reject)"
     )
+    arguments: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional updated tool arguments"
+    )
     rejection_reason: Optional[str] = Field(
         None,
         max_length=500,
