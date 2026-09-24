@@ -256,6 +256,10 @@ export function ChatMessage({ message, onApprove }) {
     }, [args.name, args.email]);
 
     const handleApprove = (isApproved) => {
+      if (isApproved && (!selectedEmail || !selectedEmail.includes('@'))) {
+        alert("Veuillez saisir une adresse e-mail valide avant d'approuver.");
+        return;
+      }
       const newArgs = { ...args };
       if (selectedEmail && isApproved) {
         newArgs.email = selectedEmail;
