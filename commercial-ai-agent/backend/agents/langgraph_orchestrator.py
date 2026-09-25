@@ -1,3 +1,6 @@
+import copy
+import json
+import logging
 import uuid
 from typing import Dict, Any, List, TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -13,6 +16,10 @@ from backend.mcp.registry import registry
 from backend.llm.router import ModelRouter
 from backend.mcp.client import MCPClient
 from backend.config.settings import settings
+from backend.database.connection import SessionLocal
+from backend.models.execution import Execution, Message
+
+logger = logging.getLogger(__name__)
 
 class AgentState(TypedDict):
     execution_id: str
@@ -125,7 +132,6 @@ class LangGraphOrchestrator:
                 if res.get("success"):
                     data = res.get('data', {})
                     try:
-                        import json
                         data_str = json.dumps(data)
                         if len(data_str) > 500:
                             data_str = '{"status": "success", "note": "Data omitted due to length"}'
@@ -167,7 +173,6 @@ class LangGraphOrchestrator:
                 if res.get("success"):
                     data = res.get('data', {})
                     try:
-                        import json
                         data_str = json.dumps(data)
                         if len(data_str) > 500:
                             data_str = '{"status": "success", "note": "Data omitted due to length"}'
@@ -206,7 +211,7 @@ class LangGraphOrchestrator:
             state["results"] = result.get("results", {})
         elif sm.current_state == ExecutionState.WAITING_APPROVAL:
             state["status"] = "waiting_approval"
-            state["results"] = result.get("results_so_far", state.get("results", {}))
+            state["results"] = result.get("results", state.get("results", {}))
             state["pending_approval"] = {
                 "step": result["step"],
                 "tool": result["tool"],
@@ -235,8 +240,6 @@ class LangGraphOrchestrator:
 
     def _assert_execution_owner(self, execution_id: str, user_id: int, create: bool = False) -> None:
         """Persist and enforce the owner of every resumable LangGraph thread."""
-        from backend.database.connection import SessionLocal
-        from backend.models.execution import Execution
         db = SessionLocal()
         try:
             execution = db.get(Execution, execution_id)
@@ -266,9 +269,6 @@ class LangGraphOrchestrator:
         # missing IDs; an existing ID owned by another user is still rejected.
         self._assert_execution_owner(execution_id, user_id, create=True)
         
-        from backend.database.connection import SessionLocal
-        from backend.models.execution import Execution, Message
-        import threading
         
         db = SessionLocal()
         try:
@@ -318,7 +318,6 @@ class LangGraphOrchestrator:
                 db.close()
         elif result_state.get("status") == "waiting_approval":
             pending = result_state.get("pending_approval", {})
-            import json
             approval_msg = json.dumps({
                 "type": "approval",
                 "tool": pending.get("tool"),
@@ -359,12 +358,12 @@ class LangGraphOrchestrator:
                 approved_steps.append(step_id)
             
             update_data = {"approved_step_ids": approved_steps}
-            
+
             if arguments is not None:
                 plan = state.get("plan")
                 if plan:
                     # Make a deep copy to ensure state update triggers correctly
-                    import copy
+
                     new_plan = copy.deepcopy(plan)
                     for step in new_plan.get("steps", []):
                         if step.get("id") == step_id:
@@ -378,8 +377,6 @@ class LangGraphOrchestrator:
             # Resume execution (it will enter 'wait_for_approval' and then loop to 'execute')
             result_state = self.graph.invoke(None, config)
             
-            from backend.database.connection import SessionLocal
-            from backend.models.execution import Message
             # Update the agent_action message status
             db = SessionLocal()
             try:
@@ -388,15 +385,14 @@ class LangGraphOrchestrator:
                     Message.role == "agent_action"
                 ).order_by(Message.id.desc()).first()
                 if msg:
-                    import json
                     try:
                         data = json.loads(msg.content)
                         if data.get("step") == step_id:
                             data["status"] = "approved"
                             msg.content = json.dumps(data)
                             db.commit()
-                    except:
-                        pass
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        logger.warning("Failed to update approval message status", exc_info=True)
                 
                 final_response = result_state.get("final_response")
                 if final_response:
@@ -422,8 +418,6 @@ class LangGraphOrchestrator:
             self.graph.update_state(config, {"status": "failed", "error": "User rejected approval"})
             result_state = self.graph.invoke(None, config)
             
-            from backend.database.connection import SessionLocal
-            from backend.models.execution import Message
             db = SessionLocal()
             try:
                 msg = db.query(Message).filter(
@@ -431,15 +425,14 @@ class LangGraphOrchestrator:
                     Message.role == "agent_action"
                 ).order_by(Message.id.desc()).first()
                 if msg:
-                    import json
                     try:
                         data = json.loads(msg.content)
                         if data.get("step") == step_id:
                             data["status"] = "rejected"
                             msg.content = json.dumps(data)
                             db.commit()
-                    except:
-                        pass
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        logger.warning("Failed to update rejection message status", exc_info=True)
                 
                 final_response = result_state.get("final_response")
                 if final_response:

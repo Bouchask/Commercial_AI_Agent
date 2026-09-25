@@ -118,8 +118,9 @@ class ExecutionEngine:
                 
                 # Check for failure or approval needed
                 if not result.get("success") and result.get("status") != "waiting_approval":
-                    state_machine.transition_to(ExecutionState.FAILED)
-                    return {"status": "failed", "step": step_id, "results": results}
+                    error_msg = result.get("error", "Step failed without specific error message")
+                    state_machine.transition_to(ExecutionState.FAILED, error_msg)
+                    return {"status": "failed", "step": step_id, "results": results, "error": error_msg}
                 
                 if result.get("status") == "waiting_approval":
                     state_machine.transition_to(ExecutionState.WAITING_APPROVAL)
@@ -297,7 +298,7 @@ class ExecutionEngine:
         start_time = time.time()
         
         try:
-            print(f"DEBUG EXECUTOR: tool={tool_name}, raw_arguments={arguments}, resolved={resolved_arguments}")
+            logger.debug("Executing tool=%s raw_arguments=%s resolved=%s", tool_name, arguments, resolved_arguments)
             result = self._invoke_tool_with_timeout(
                 tool_name=tool_name,
                 arguments=resolved_arguments,

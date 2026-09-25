@@ -16,7 +16,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.api.app_improved import create_app
+from backend.api.app import create_app
 from backend.config.settings import settings
 from backend.database.connection import SessionLocal, engine
 from backend.models.base import Base
