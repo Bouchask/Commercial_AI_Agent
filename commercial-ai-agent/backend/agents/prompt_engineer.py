@@ -26,8 +26,9 @@ class PromptEngineerAgent:
             "tax_rate": "float (e.g., 0.20 for 20% TVA) or 0.20",
             "meeting_date": "string (extracted target date for a meeting, e.g. '2026-10-10') or null",
             "meeting_time": "string (extracted target time for a meeting, e.g. '14:00') or null",
+            "attendees": ["list of email addresses of attendees to invite to the meeting, e.g. extracted client emails"],
             "attachments": ["list of absolute file paths to attach, if provided in context"],
-            "actions": ["list of requested actions (e.g., db.find_or_create_client, utils.prepare_quote_items, db.create_quote, document.generate, email.send, db.create_service, db.update_service_price)"]
+            "actions": ["list of requested actions (e.g., db.find_or_create_client, utils.prepare_quote_items, db.create_quote, document.generate, email.send, google.calendar.create_meeting, google.sheets.append_row)"]
         }
         
         Rules:
@@ -43,6 +44,7 @@ class PromptEngineerAgent:
         - Use actual catalogue codes returned by tool descriptions if possible, for example: WEB-SHOW, WEB-ECOMM, APP-MOB, UI-UX, SEO-OPT, MAINT-12, HOST-12, MGT-COMM, CONSULT, AUDIT-IT, PACK-WEB, PACK-MOB, PACK-DESK, PACK-ECOMM.
         - If the user explicitly asks to add a NEW service to the catalogue with a price, you MUST include "db.create_service". If they ask to update an existing service price, include "db.update_service_price".
         - If the user asks to schedule a meeting, you MUST add BOTH "google.calendar.check_availability" AND "google.calendar.create_meeting" to the 'actions' array, in that exact order.
+        - MEETING ATTENDEES & INVITATIONS: If the user mentions participants, clients, or email addresses for a meeting (e.g. "avec client1@... et client2@..." or "organise une réunion avec 2 clients et envoie l'invitation"), extract their email addresses into the "attendees" array. If invitations or emails are requested, you MUST ALSO include "email.prepare" and "email.send" in the 'actions' array so direct email invitations with the meeting details and link are sent to the clients!
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
         - If the Previous Context shows a quote/document was already generated, and the user just asks to send it via email, DO NOT include quote creation actions (like db.create_quote, document.generate) UNLESS they explicitly request a different document format. However, you MUST include "db.find_or_create_client" in the 'actions' array before the email actions to ensure we retrieve the client's email address from the database. Then include "email.prepare" and "email.send", and put the previously generated file_path in "attachments".
         - CRITICAL RULE FOR PROPOSALS/QUESTIONS: If the user asks for advice, a proposal, or prices (e.g. "what do you propose?", "how much?", "je veux créer une app"), this is an INFORMATIONAL question. DO NOT add "db.create_quote", "db.find_or_create_client", or "google.sheets.append_row". You may add "db.get_services" to look up prices, but NEVER create a client or document unless explicitly commanded (e.g. "crée un devis", "fais moi une facture").

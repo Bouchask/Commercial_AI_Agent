@@ -2,10 +2,9 @@ import copy
 import json
 import logging
 import uuid
+import sqlite3
 from typing import Dict, Any, List, TypedDict
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.sqlite import SqliteSaver
-import sqlite3
 
 from backend.agents.prompt_engineer import PromptEngineerAgent
 from backend.agents.planner import PlannerAgent
@@ -21,7 +20,7 @@ from backend.models.execution import Execution, Message
 
 logger = logging.getLogger(__name__)
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     execution_id: str
     user_input: str
     intent: Dict[str, Any]
@@ -33,9 +32,34 @@ class AgentState(TypedDict):
     pending_approval: Dict[str, Any]
     final_response: str
     execution_state: str
+    replan_count: int
+    failed_step_info: Dict[str, Any]
 
-from psycopg_pool import ConnectionPool
-from langgraph.checkpoint.postgres import PostgresSaver
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:
+    ConnectionPool = None
+
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+except ImportError:
+    try:
+        from langgraph_checkpoint_sqlite import SqliteSaver
+    except ImportError:
+        SqliteSaver = None
+
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+except ImportError:
+    try:
+        from langgraph_checkpoint_postgres import PostgresSaver
+    except ImportError:
+        PostgresSaver = None
+
+try:
+    from langgraph.checkpoint.memory import MemorySaver
+except ImportError:
+    MemorySaver = None
 
 class LangGraphOrchestrator:
     def __init__(self):
@@ -47,15 +71,16 @@ class LangGraphOrchestrator:
         self.executor = ExecutionEngine(self.mcp_client)
         
         db_path = settings.DATABASE_URL
-        if db_path.startswith("sqlite"):
-            self.pool = None
+        self.conn = None
+        self.pool = None
+
+        if db_path.startswith("sqlite") and SqliteSaver is not None:
             import sqlite3
-            from langgraph.checkpoint.sqlite import SqliteSaver
             self.conn = sqlite3.connect(db_path.replace("sqlite:///", ""), check_same_thread=False)
             self.checkpointer = SqliteSaver(self.conn)
-            self.checkpointer.setup()
-        else:
-            self.conn = None
+            if hasattr(self.checkpointer, "setup"):
+                self.checkpointer.setup()
+        elif (not db_path.startswith("sqlite")) and PostgresSaver is not None and ConnectionPool is not None:
             # Extract psycopg compatible string
             psycopg_url = db_path
             if psycopg_url.startswith("postgresql+psycopg://"):
@@ -63,8 +88,6 @@ class LangGraphOrchestrator:
             elif psycopg_url.startswith("postgresql+psycopg2://"):
                 psycopg_url = psycopg_url.replace("postgresql+psycopg2://", "postgresql://", 1)
                 
-            # Keep this separate checkpoint pool deliberately tiny.  The API
-            # also uses SQLAlchemy and hosted Postgres plans cap connections.
             self.pool = ConnectionPool(
                 conninfo=psycopg_url,
                 min_size=0,
@@ -73,7 +96,12 @@ class LangGraphOrchestrator:
                 kwargs={"autocommit": True},
             )
             self.checkpointer = PostgresSaver(self.pool)
-            self.checkpointer.setup()
+            if hasattr(self.checkpointer, "setup"):
+                self.checkpointer.setup()
+        elif MemorySaver is not None:
+            self.checkpointer = MemorySaver()
+        else:
+            raise RuntimeError("No suitable LangGraph checkpointer available.")
             
         self.graph = self._build_graph()
 
@@ -89,6 +117,7 @@ class LangGraphOrchestrator:
         workflow.add_node("analyze", self._node_analyze)
         workflow.add_node("plan", self._node_plan)
         workflow.add_node("execute", self._node_execute)
+        workflow.add_node("replan", self._node_replan)
         workflow.add_node("generate_response", self._node_generate_response)
         workflow.add_node("wait_for_approval", self._node_wait_for_approval)
         
@@ -105,10 +134,13 @@ class LangGraphOrchestrator:
             {
                 "completed": "generate_response",
                 "waiting_approval": "wait_for_approval",
+                "need_replan": "replan",
                 "failed": "generate_response"
             }
         )
         
+        # Self-healing loop: after replanning, retry execution with the healed plan
+        workflow.add_edge("replan", "execute")
         # After waiting for approval, we always loop back to execute
         workflow.add_edge("wait_for_approval", "execute")
         workflow.add_edge("generate_response", END)
@@ -218,11 +250,71 @@ class LangGraphOrchestrator:
                 "arguments": result["arguments"]
             }
         else:
-            state["status"] = "failed"
-            state["error"] = sm.error
+            # Self-healing loop: check if we can replan dynamically
+            replan_count = state.get("replan_count", 0)
+            if replan_count < 2:
+                state["status"] = "need_replan"
+                state["replan_count"] = replan_count + 1
+                state["failed_step_info"] = {
+                    "step_id": result.get("step"),
+                    "tool": result.get("tool"),
+                    "error": sm.error or result.get("error", "Unknown execution error"),
+                }
+                state["results"] = result.get("results", state.get("results", {}))
+                logger.warning(
+                    "Execution step failed. Triggering Self-Healing replan (%s/2). Error: %s",
+                    state["replan_count"], state["failed_step_info"]["error"]
+                )
+            else:
+                state["status"] = "failed"
+                state["error"] = sm.error or result.get("error")
 
         state["execution_state"] = sm.current_state.value
         
+        return state
+
+    def _node_replan(self, state: AgentState):
+        failed_info = state.get("failed_step_info", {})
+        failed_step = failed_info.get("step_id")
+        failed_tool = failed_info.get("tool")
+        failed_err = failed_info.get("error")
+
+        available_tools = registry.get_planner_tools()
+        results = state.get("results", {})
+        next_step_id = (max(results.keys()) + 1) if results else 1
+
+        context_lines = [
+            f"=== SELF-HEALING / RECOVERY MODE (Attempt {state.get('replan_count', 1)}/2) ===",
+            f"Previous Step {failed_step} with tool '{failed_tool}' failed with error: {failed_err}.",
+            "Please adapt the execution plan to achieve the user's objective without repeating the same error.",
+            "Use alternative tools, adjusted parameters, or proceed with remaining tasks."
+        ]
+        for s_id, res in results.items():
+            if res.get("success"):
+                try:
+                    data_str = json.dumps(res.get('data', {}))[:300]
+                except Exception:
+                    data_str = "success"
+                context_lines.append(f"- Step {s_id} already completed successfully: {data_str}")
+        
+        recovery_context = "\n".join(context_lines) + "\n"
+
+        new_plan = self.planner.plan(
+            intent=state["intent"],
+            available_tools=available_tools,
+            previous_context=recovery_context,
+            next_step_id=next_step_id,
+            user_input=state["user_input"]
+        )
+
+        existing_steps = state.get("plan", {}).get("steps", [])
+        completed_ids = {k for k, v in results.items() if v.get("success")}
+        preserved_steps = [s for s in existing_steps if int(s.get("id", 0)) in completed_ids]
+        combined_steps = preserved_steps + new_plan.get("steps", [])
+
+        state["plan"] = {"steps": combined_steps}
+        state["status"] = "executing"
+        state["execution_state"] = ExecutionState.EXECUTING.value
         return state
 
     def _node_wait_for_approval(self, state: AgentState):

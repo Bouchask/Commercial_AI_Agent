@@ -47,7 +47,7 @@ def create_meeting(
             },
         }
 
-        event_result = service.events().insert(calendarId='primary', body=event).execute()
+        event_result = service.events().insert(calendarId='primary', body=event, sendUpdates='all').execute()
         
         html_link = event_result.get('htmlLink')
         
@@ -96,7 +96,11 @@ def create_meeting(
             "status": "success",
             "message": "Meeting created successfully",
             "event_id": event_result.get('id'),
-            "link": html_link
+            "link": html_link,
+            "title": title,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "attendees": attendees or []
         }
     except Exception as e:
         raise RuntimeError(f"Failed to create Google Calendar meeting: {str(e)}")

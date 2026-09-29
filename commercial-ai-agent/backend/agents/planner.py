@@ -56,7 +56,13 @@ class PlannerAgent:
         - For document.generate, ALWAYS omit the "template_name" argument so it uses the system default, or pass exactly "b2b" if required.
         - For 'email.prepare', you MUST provide 'to', 'subject', and 'body' arguments! If 'db.find_or_create_client' is in the plan, you MUST use the placeholder "{{stepN.email}}" for the 'to' argument (where N is the EXACT step ID of the db.find_or_create_client action). NEVER hardcode an email address if a client step exists! Only use a hardcoded email if there is NO client step. You MUST invent an appropriate professional 'subject' and 'body' yourself.
         - For 'google.calendar.check_availability', you MUST execute this BEFORE 'google.calendar.create_meeting' to find a free slot. Determine a target date (use 'meeting_date' from the Intent if present, otherwise default to Current Date + 10 days) and set 'date_start' to 08:00:00 of that day, and 'date_end' to 18:00:00 of that day (in ISO 8601).
-        - For 'google.calendar.create_meeting', use it when the user explicitly requests to schedule or plan a meeting. You must provide a 'title' and 'start_time' (in ISO 8601 format). Calculate the start_time intelligently: Use 'meeting_date' and 'meeting_time' from the Intent if provided. If 'meeting_date' is null, default to the target date (Current Date + 10 days). If 'meeting_time' is null, pick a logical default (e.g. 10:00 AM) but if previous context or the result of check_availability indicates it's busy, pick the next available slot! Ensure correct year and month based on the Current Date.
+        - For 'google.calendar.create_meeting', use it when the user explicitly requests to schedule or plan a meeting. You must provide a 'title' and 'start_time' (in ISO 8601 format). Calculate the start_time intelligently: Use 'meeting_date' and 'meeting_time' from the Intent if provided. If 'meeting_date' is null, default to the target date (Current Date + 10 days). If 'meeting_time' is null, pick a logical default (e.g. 10:00 AM) but if previous context or the result of check_availability indicates it's busy, pick the next available slot! Ensure correct year and month based on the Current Date. If attendees are provided in the Intent (e.g. 2 client emails), pass them in the 'attendees' argument array!
+        - MEETING INVITATIONS TO CLIENTS: When a meeting is created and attendees/clients are specified (e.g. 2 client emails), or when the user asks to send meeting invitations by email:
+          - Ensure 'google.calendar.create_meeting' has the attendees list.
+          - For each client email in attendees (e.g. client 1 and client 2):
+            - Add an 'email.prepare' step and an 'email.send' step for that client's email address.
+            - Set 'depends_on' to the ID of the 'google.calendar.create_meeting' step. (Because they depend on the same parent meeting step, the execution engine will execute the emails to both clients in PARALLEL!).
+            - In 'email.prepare', set 'to' to the client's email, 'subject' to "Invitation : " + meeting title, and 'body' to an invitation message including the scheduled date, time, and meeting link "{{stepN.link}}" (where N is the create_meeting step ID).
         - Automatic Google Sheets Logging:
           - If you use 'db.find_or_create_client', you MUST add a step using 'google.sheets.append_row' with sheet_name="Clients" to log the client info. (e.g. values: ["Current Date", "{{step1.name}}", "{{step1.email}}"]). NEVER hardcode the client's name or email here, always use the placeholders from the db.find_or_create_client step output!
           - If you use 'google.calendar.create_meeting', you MUST add a step using 'google.sheets.append_row' with sheet_name="Meetings" to log the meeting. (e.g. values: ["Current Date", "Title", "Start Time", "Attendees"]).
@@ -88,7 +94,11 @@ class PlannerAgent:
             filtered_tools = [t for t in available_tools if t.get("name") in intent_actions]
             # Always ensure some essential tools are present if the list is empty
             if not filtered_tools:
-                essential_tools = ["db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote", "document.generate", "google.sheets.append_row"]
+                essential_tools = [
+                    "db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote",
+                    "document.generate", "google.sheets.append_row", "google.calendar.check_availability",
+                    "google.calendar.create_meeting", "email.prepare", "email.send"
+                ]
                 filtered_tools = [t for t in available_tools if t.get("name") in essential_tools]
             available_tools = filtered_tools
 

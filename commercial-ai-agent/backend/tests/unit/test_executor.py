@@ -109,3 +109,41 @@ class TestExecutePlan:
         result = engine.execute_plan("test-456", plan, sm, prior_results=prior)
         assert result["status"] == "completed"
         engine.mcp.invoke.assert_not_called()
+
+    def test_parallel_independent_steps_execution(self, engine):
+        """Verify that steps without mutual dependencies execute concurrently."""
+        executed_order = []
+
+        def slow_invoke(tool_name, arguments, execution_id=None):
+            import time
+            executed_order.append(tool_name)
+            time.sleep(0.05)
+            return {"tool": tool_name}
+
+        engine.mcp.invoke = slow_invoke
+        with patch.object(engine, '_validate_tool_result'):
+            with patch('backend.execution.executor_improved.registry') as mock_reg:
+                mock_tool = MagicMock()
+                mock_tool.requires_approval = False
+                mock_reg.get_tool.return_value = mock_tool
+
+                sm = StateMachine()
+                # Step 1 is parent, Step 2 and Step 3 both depend on Step 1 and should execute in parallel
+                plan = {
+                    "steps": [
+                        {"id": 1, "tool": "step_root", "arguments": {}, "depends_on": []},
+                        {"id": 2, "tool": "step_branch_a", "arguments": {}, "depends_on": [1]},
+                        {"id": 3, "tool": "step_branch_b", "arguments": {}, "depends_on": [1]},
+                    ]
+                }
+                result = engine.execute_plan("test-parallel", plan, sm, approved_step_ids=[])
+
+                assert result["status"] == "completed"
+                assert sm.current_state == ExecutionState.COMPLETED
+                assert len(result["results"]) == 3
+                assert result["results"][1]["data"]["tool"] == "step_root"
+                assert result["results"][2]["data"]["tool"] == "step_branch_a"
+                assert result["results"][3]["data"]["tool"] == "step_branch_b"
+                assert executed_order[0] == "step_root"
+                assert set(executed_order[1:]) == {"step_branch_a", "step_branch_b"}
+

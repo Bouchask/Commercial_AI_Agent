@@ -92,8 +92,10 @@ class ExecutionEngine:
         
         log_execution(execution_id, 0, f"Starting execution of {len(steps)} steps")
         
+        remaining_steps = {int(s["id"]): s for s in steps if not results.get(int(s["id"]), {}).get("success")}
+        
         try:
-            for step in steps:
+            while remaining_steps:
                 # Check execution timeout
                 elapsed = time.time() - start_time
                 if elapsed > self.execution_timeout_sec:
@@ -104,38 +106,159 @@ class ExecutionEngine:
                         operation="execution",
                         timeout_sec=self.execution_timeout_sec
                     )
-                
-                result = self._execute_step(
-                    execution_id=execution_id,
-                    step=step,
-                    approved_step_ids=approved_step_ids,
-                    prior_results=results,
-                    state_machine=state_machine
-                )
-                
-                step_id = int(step["id"])
-                results[step_id] = result
-                
-                # Check for failure or approval needed
-                if not result.get("success") and result.get("status") != "waiting_approval":
-                    error_msg = result.get("error", "Step failed without specific error message")
+
+                # Identify all ready steps (all dependencies satisfied in results)
+                ready_steps = []
+                for step_id, step in list(remaining_steps.items()):
+                    depends_on = [int(d) for d in step.get("depends_on", [])]
+                    if all(dep in results and results[dep].get("success") for dep in depends_on):
+                        ready_steps.append(step)
+
+                if not ready_steps:
+                    # Check if any dependency failed
+                    failed_deps = [
+                        dep for step in remaining_steps.values()
+                        for dep in [int(d) for d in step.get("depends_on", [])]
+                        if dep in results and not results[dep].get("success")
+                    ]
+                    if failed_deps:
+                        error_msg = f"Cannot proceed: dependent step(s) {failed_deps} failed"
+                    else:
+                        error_msg = "Deadlock or unresolved dependencies in execution plan"
                     state_machine.transition_to(ExecutionState.FAILED, error_msg)
-                    return {"status": "failed", "step": step_id, "results": results, "error": error_msg}
-                
-                if result.get("status") == "waiting_approval":
-                    state_machine.transition_to(ExecutionState.WAITING_APPROVAL)
-                    return {
-                        "status": "waiting_approval",
-                        "step": step_id,
-                        "tool": step.get("tool"),
-                        "arguments": result.get("arguments"),
-                        "results": results
-                    }
-            
+                    return {"status": "failed", "results": results, "error": error_msg}
+
+                # Check if any ready step requires approval before running
+                approval_needed_step = None
+                for step in ready_steps:
+                    step_id = int(step["id"])
+                    tool_name = step.get("tool")
+                    tool_schema = registry.get_tool(tool_name)
+                    if tool_schema and ApprovalManager.requires_approval(tool_schema) and step_id not in approved_step_ids:
+                        approval_needed_step = step
+                        break
+
+                if approval_needed_step:
+                    # Execute this step up to the approval gate
+                    res = self._execute_step(
+                        execution_id=execution_id,
+                        step=approval_needed_step,
+                        approved_step_ids=approved_step_ids,
+                        prior_results=results,
+                        state_machine=state_machine
+                    )
+                    step_id = int(approval_needed_step["id"])
+                    results[step_id] = res
+                    if res.get("status") == "waiting_approval":
+                        state_machine.transition_to(ExecutionState.WAITING_APPROVAL)
+                        return {
+                            "status": "waiting_approval",
+                            "step": step_id,
+                            "tool": approval_needed_step.get("tool"),
+                            "arguments": res.get("arguments"),
+                            "results": results,
+                            "results_so_far": results
+                        }
+                    elif not res.get("success"):
+                        error_msg = res.get("error", "Step failed")
+                        state_machine.transition_to(ExecutionState.FAILED, error_msg)
+                        return {
+                            "status": "failed",
+                            "step": step_id,
+                            "tool": approval_needed_step.get("tool"),
+                            "results": results,
+                            "results_so_far": results,
+                            "error": error_msg
+                        }
+                    else:
+                        remaining_steps.pop(step_id, None)
+                        continue
+
+                # We have a batch of ready steps that can execute!
+                if len(ready_steps) == 1:
+                    step = ready_steps[0]
+                    step_id = int(step["id"])
+                    res = self._execute_step(
+                        execution_id=execution_id,
+                        step=step,
+                        approved_step_ids=approved_step_ids,
+                        prior_results=results,
+                        state_machine=state_machine
+                    )
+                    results[step_id] = res
+                    if not res.get("success") and res.get("status") != "waiting_approval":
+                        error_msg = res.get("error", "Step failed without specific error message")
+                        state_machine.transition_to(ExecutionState.FAILED, error_msg)
+                        return {
+                            "status": "failed",
+                            "step": step_id,
+                            "tool": step.get("tool"),
+                            "results": results,
+                            "results_so_far": results,
+                            "error": error_msg
+                        }
+                    if res.get("status") == "waiting_approval":
+                        state_machine.transition_to(ExecutionState.WAITING_APPROVAL)
+                        return {
+                            "status": "waiting_approval",
+                            "step": step_id,
+                            "tool": step.get("tool"),
+                            "arguments": res.get("arguments"),
+                            "results": results,
+                            "results_so_far": results
+                        }
+                    remaining_steps.pop(step_id, None)
+                else:
+                    # Execute independent ready steps in PARALLEL!
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    logger.info("Executing %s independent steps in parallel: %s", len(ready_steps), [s["id"] for s in ready_steps])
+                    
+                    batch_failed = None
+                    batch_waiting = None
+                    
+                    with ThreadPoolExecutor(max_workers=min(len(ready_steps), 4)) as executor_pool:
+                        future_to_step = {
+                            executor_pool.submit(
+                                self._execute_step, execution_id, s, approved_step_ids, results, state_machine
+                            ): s
+                            for s in ready_steps
+                        }
+                        for future in as_completed(future_to_step):
+                            s = future_to_step[future]
+                            s_id = int(s["id"])
+                            try:
+                                s_res = future.result()
+                                results[s_id] = s_res
+                                if not s_res.get("success") and s_res.get("status") != "waiting_approval":
+                                    batch_failed = (s_id, s.get("tool"), s_res.get("error", "Parallel step failed"))
+                                elif s_res.get("status") == "waiting_approval":
+                                    batch_waiting = (s_id, s.get("tool"), s_res.get("arguments"))
+                                else:
+                                    remaining_steps.pop(s_id, None)
+                            except Exception as ex:
+                                batch_failed = (s_id, s.get("tool"), str(ex))
+
+                    if batch_failed:
+                        f_id, f_tool, f_err = batch_failed
+                        state_machine.transition_to(ExecutionState.FAILED, f_err)
+                        return {"status": "failed", "step": f_id, "tool": f_tool, "results": results, "results_so_far": results, "error": f_err}
+
+                    if batch_waiting:
+                        w_id, w_tool, w_args = batch_waiting
+                        state_machine.transition_to(ExecutionState.WAITING_APPROVAL)
+                        return {
+                            "status": "waiting_approval",
+                            "step": w_id,
+                            "tool": w_tool,
+                            "arguments": w_args,
+                            "results": results,
+                            "results_so_far": results
+                        }
+
             state_machine.transition_to(ExecutionState.COMPLETED)
             log_execution(execution_id, 0, "Execution completed successfully")
-            return {"status": "completed", "results": results}
-        
+            return {"status": "completed", "results": results, "results_so_far": results}
+
         except AgentTimeoutError:
             raise
         except Exception as e:
