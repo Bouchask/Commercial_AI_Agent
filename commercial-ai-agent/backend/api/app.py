@@ -1,6 +1,6 @@
 import logging
 import io
-from flask import Flask, jsonify, request, g, send_file, abort
+from flask import Flask, jsonify, request, g, send_file, abort, render_template_string
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -15,7 +15,7 @@ from backend.database.connection import SessionLocal
 from backend.database.schema_guard import ensure_critical_user_columns, ensure_ownership_columns
 from backend.models.user import User
 from backend.api.middleware import setup_middleware, RequestValidator
-from backend.api_schemas import ChatRequest, LoginRequest, ApproveRequest
+from backend.api_schemas import ChatRequest, LoginRequest, ApproveRequest, ProcessRequest
 from backend.logging_config import setup_logging, get_logger
 
 # Configure basic logging if not already configured
@@ -86,6 +86,23 @@ def create_app():
                 )
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_execution_id ON messages (execution_id)"))
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS meetings (
+                    id VARCHAR PRIMARY KEY,
+                    title VARCHAR NOT NULL,
+                    description TEXT,
+                    start_time TIMESTAMP NOT NULL,
+                    end_time TIMESTAMP NOT NULL,
+                    active_from TIMESTAMP NOT NULL,
+                    active_until TIMESTAMP NOT NULL,
+                    attendees TEXT,
+                    google_event_id VARCHAR,
+                    google_calendar_link VARCHAR,
+                    meet_url VARCHAR NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
     except Exception as e:
         logger.error(f"Auto-migration error: {e}")
 
@@ -330,6 +347,25 @@ def create_app():
         finally:
             db.close()
 
+    @app.route("/api/process", methods=["POST"])
+    @jwt_required
+    @limiter.limit("30 per hour")
+    @RequestValidator.validate_request_size(max_size_mb=1)
+    @RequestValidator.validate_json_body(ProcessRequest)
+    def process():
+        user_input = g.validated_data.user_input
+        try:
+            result = app.orchestrator.process_request(user_input, user_id=request.current_user.id)
+            return jsonify(result)
+        except PermissionError:
+            return jsonify({"status": "error", "error": "Execution not found"}), 404
+        except Exception as e:
+            logging.exception("Error during orchestrator execution")
+            return jsonify({
+                "status": "error",
+                "error": "Unable to process the request"
+            }), 500
+
     @app.route("/api/chat", methods=["POST"])
     @jwt_required
     @limiter.limit("30 per hour")
@@ -416,5 +452,123 @@ def create_app():
                 "status": "error",
                 "error": "Unable to process approval"
             }), 500
+
+    @app.route("/api/meet/<meet_id>", methods=["GET"])
+    def access_meeting_room(meet_id):
+        from backend.models.meeting import Meeting
+        from backend.api.meet_views import WAITING_ROOM_HTML, ACTIVE_ROOM_HTML, EXPIRED_ROOM_HTML, NOT_FOUND_HTML
+        import datetime
+        import json
+        import os
+
+        meeting = None
+        db = SessionLocal()
+        try:
+            meeting = db.query(Meeting).filter(Meeting.id == meet_id).first()
+        except Exception as e:
+            logger.warning(f"Error querying meeting from DB: {e}")
+        finally:
+            db.close()
+
+        # Fallback to local client files if not found in DB
+        if not meeting:
+            try:
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                clients_dir = os.path.join(base_dir, "data", "clients")
+                if os.path.exists(clients_dir):
+                    for client_folder in os.listdir(clients_dir):
+                        meet_dir = os.path.join(clients_dir, client_folder, "meet")
+                        if os.path.exists(meet_dir):
+                            for fname in os.listdir(meet_dir):
+                                if fname.endswith(".json"):
+                                    with open(os.path.join(meet_dir, fname), "r") as f:
+                                        m_data = json.load(f)
+                                        if m_data.get("id") == meet_id:
+                                            import dateutil.parser
+                                            class MeetingProxy:
+                                                pass
+                                            meeting = MeetingProxy()
+                                            meeting.id = m_data.get("id")
+                                            meeting.title = m_data.get("title")
+                                            meeting.description = m_data.get("description")
+                                            meeting.start_time = dateutil.parser.parse(m_data.get("start_time"))
+                                            meeting.end_time = dateutil.parser.parse(m_data.get("end_time"))
+                                            meeting.active_from = dateutil.parser.parse(m_data.get("active_from"))
+                                            meeting.active_until = dateutil.parser.parse(m_data.get("active_until"))
+                                            meeting.meet_url = m_data.get("meet_url")
+                                            meeting.google_calendar_link = m_data.get("calendar_link")
+                                            break
+                            if meeting:
+                                break
+            except Exception as e:
+                logger.warning(f"Error loading meeting from client files: {e}")
+
+        is_json = request.args.get("format") == "json" or request.headers.get("Accept") == "application/json"
+
+        if not meeting:
+            if is_json:
+                return jsonify({"error": "Meeting not found", "status": "not_found"}), 404
+            return render_template_string(NOT_FOUND_HTML), 404
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        active_from = meeting.active_from
+        if active_from.tzinfo is None:
+            active_from = active_from.replace(tzinfo=datetime.timezone.utc)
+        active_until = meeting.active_until
+        if active_until.tzinfo is None:
+            active_until = active_until.replace(tzinfo=datetime.timezone.utc)
+
+        # State 1: Early (Waiting Room)
+        if now < active_from:
+            seconds_remaining = max(1, int((active_from - now).total_seconds()))
+            if is_json:
+                return jsonify({
+                    "status": "waiting",
+                    "meeting_id": meeting.id,
+                    "title": meeting.title,
+                    "active": False,
+                    "active_from": active_from.isoformat(),
+                    "active_until": active_until.isoformat(),
+                    "seconds_until_active": seconds_remaining,
+                    "message": "Meeting room is not active yet. It will open 15 minutes before the meeting."
+                }), 200
+            return render_template_string(
+                WAITING_ROOM_HTML,
+                meeting=meeting,
+                seconds_remaining=seconds_remaining,
+                active_from_str=active_from.strftime("%Y-%m-%d %H:%M UTC")
+            ), 200
+
+        # State 2: Expired (Meeting ended)
+        if now > active_until:
+            if is_json:
+                return jsonify({
+                    "status": "expired",
+                    "meeting_id": meeting.id,
+                    "title": meeting.title,
+                    "active": False,
+                    "active_from": active_from.isoformat(),
+                    "active_until": active_until.isoformat(),
+                    "message": "Meeting room is closed. The meeting duration has ended."
+                }), 200
+            return render_template_string(
+                EXPIRED_ROOM_HTML,
+                meeting=meeting,
+                active_until_str=active_until.strftime("%Y-%m-%d %H:%M UTC")
+            ), 200
+
+        # State 3: Active
+        if is_json:
+            return jsonify({
+                "status": "active",
+                "meeting_id": meeting.id,
+                "title": meeting.title,
+                "active": True,
+                "meet_url": meeting.meet_url,
+                "active_until": active_until.isoformat(),
+                "message": "Meeting room is currently active."
+            }), 200
+
+        return render_template_string(ACTIVE_ROOM_HTML, meeting=meeting), 200
 
     return app

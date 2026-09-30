@@ -78,6 +78,9 @@ class ExecutionEngine:
         
         state_machine.transition_to(ExecutionState.EXECUTING)
         
+        from backend.mcp.google_auth import set_active_execution_id
+        set_active_execution_id(execution_id)
+        
         # Validate plan structure
         validation_result = self._validate_plan(plan)
         if validation_result:
@@ -341,6 +344,9 @@ class ExecutionEngine:
         arguments = step.get("arguments", {})
         depends_on = [int(d) for d in step.get("depends_on", [])]
         
+        from backend.mcp.google_auth import set_active_execution_id
+        set_active_execution_id(execution_id)
+        
         log_execution(execution_id, step_id, f"Executing step: {tool_name}")
         
         # Check if already executed
@@ -425,7 +431,8 @@ class ExecutionEngine:
             result = self._invoke_tool_with_timeout(
                 tool_name=tool_name,
                 arguments=resolved_arguments,
-                timeout_sec=self.step_timeout_sec
+                timeout_sec=self.step_timeout_sec,
+                execution_id=execution_id
             )
             
             # Validate result
@@ -449,7 +456,8 @@ class ExecutionEngine:
         self,
         tool_name: str,
         arguments: Dict[str, Any],
-        timeout_sec: float
+        timeout_sec: float,
+        execution_id: Optional[str] = None
     ) -> Any:
         """
         Invoke a tool with timeout protection.
@@ -458,6 +466,7 @@ class ExecutionEngine:
             tool_name: Name of tool
             arguments: Tool arguments
             timeout_sec: Timeout in seconds
+            execution_id: Optional execution ID
         
         Returns:
             Tool result
@@ -466,7 +475,7 @@ class ExecutionEngine:
         
         try:
             # Invoke MCP tool
-            result = self.mcp.invoke(tool_name, arguments)
+            result = self.mcp.invoke(tool_name, arguments, execution_id=execution_id)
             
             # Timeout was OK
             duration = time.time() - start_time

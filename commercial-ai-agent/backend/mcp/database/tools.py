@@ -7,6 +7,7 @@ from backend.models.client import Client
 from backend.models.service import Service
 from backend.models.quote import Quote, QuoteItem
 from backend.database.catalogue import seed_catalogue
+from backend.mcp.google_auth import get_current_user
 
 def get_db_session() -> Session:
     return SessionLocal()
@@ -17,11 +18,10 @@ def search_client(name: str) -> List[Dict[str, Any]]:
     try:
         query = db.query(Client).filter(Client.name.ilike(f"%{name}%"))
         try:
-            from flask import request
-            user = getattr(request, "current_user", None)
+            user = get_current_user()
             if user and (user.role or "").upper() != "ADMIN":
                 query = query.filter(Client.owner_user_id == user.id)
-        except RuntimeError:
+        except Exception:
             pass
         clients = query.all()
         return [
@@ -48,9 +48,10 @@ def create_client(name: str, email: Optional[str] = None, phone: Optional[str] =
     try:
         owner_user_id = None
         try:
-            from flask import request
-            owner_user_id = getattr(request, "current_user", None).id
-        except (RuntimeError, AttributeError):
+            user = get_current_user()
+            if user:
+                owner_user_id = user.id
+        except Exception:
             pass
         new_client = Client(name=name, email=email, phone=phone, address=address, owner_user_id=owner_user_id)
         db.add(new_client)
@@ -81,13 +82,12 @@ def find_or_create_client(name: str, email: Optional[str] = None, phone: Optiona
         query = db.query(Client).filter(Client.name.ilike(f"%{name}%"))
         owner_user_id = None
         try:
-            from flask import request
-            user = getattr(request, "current_user", None)
+            user = get_current_user()
             if user:
                 owner_user_id = user.id
                 if (user.role or "").upper() != "ADMIN":
                     query = query.filter(Client.owner_user_id == user.id)
-        except RuntimeError:
+        except Exception:
             pass
             
         existing = None

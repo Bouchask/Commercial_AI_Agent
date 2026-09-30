@@ -1,7 +1,6 @@
 from typing import Dict, Any, List, Optional
 from googleapiclient.discovery import build
-from backend.mcp.google_auth import get_user_google_credentials
-from flask import request
+from backend.mcp.google_auth import get_user_google_credentials, get_current_user
 from backend.database.connection import SessionLocal
 
 def append_row(
@@ -18,14 +17,14 @@ def append_row(
         service = build('sheets', 'v4', credentials=creds)
         
         # Determine which spreadsheet_id to use
-        current_user = getattr(request, 'current_user', None)
+        current_user = get_current_user()
         if (current_user and current_user.default_spreadsheet_id and spreadsheet_id
                 and spreadsheet_id != current_user.default_spreadsheet_id):
             raise ValueError("Only the authenticated user's default spreadsheet may be modified.")
         
         if not spreadsheet_id:
             if not current_user:
-                raise ValueError("Cannot auto-create spreadsheet: no current user found in request.")
+                raise ValueError("Cannot auto-create spreadsheet: no authenticated user found.")
                 
             # If the user already has a default spreadsheet, use it
             if current_user.default_spreadsheet_id:

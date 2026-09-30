@@ -138,3 +138,151 @@ class TestSelfHealingLoop:
         assert repaired_state["plan"]["steps"][0]["tool"] == "utils.calculate"
         orchestrator.planner.plan.assert_called_once()
         assert "SELF-HEALING" in orchestrator.planner.plan.call_args[1]["previous_context"]
+
+
+class TestMeetingRoomAndMCPTool:
+    """Test the schedule_meeting MCP tool and time-locked room access control."""
+
+    @patch("backend.mcp.google_calendar.tools.get_user_google_credentials")
+    @patch("backend.mcp.google_calendar.tools.build")
+    def test_create_meeting_mcp_tool_generates_timelocked_room_and_sends_invites(self, mock_build, mock_get_creds):
+        from backend.mcp.google_calendar.tools import create_meeting, schedule_meeting
+        
+        mock_creds = MagicMock()
+        mock_get_creds.return_value = mock_creds
+
+        mock_service = MagicMock()
+        mock_events = MagicMock()
+        mock_insert = MagicMock()
+        mock_insert.execute.return_value = {
+            "id": "gcal_evt_9988",
+            "htmlLink": "https://calendar.google.com/event?eid=gcal_evt_9988",
+            "hangoutLink": "https://meet.google.com/abc-defg-hij"
+        }
+        mock_events.insert.return_value = mock_insert
+        mock_service.events.return_value = mock_events
+        mock_build.return_value = mock_service
+
+        result = schedule_meeting(
+            title="Point Stratégique & Offre Commerciale",
+            start_time="2026-10-20T14:00:00Z",
+            end_time="2026-10-20T15:00:00Z",
+            attendees=["client@prospect.fr", "directeur@partner.com"],
+            description="Présentation de la proposition"
+        )
+
+        assert result["status"] == "success"
+        assert result["invitations_sent"] is True
+        assert result["event_id"] == "gcal_evt_9988"
+        assert result["meet_url"] == "https://meet.google.com/abc-defg-hij"
+        assert result["time_locked_room_url"].startswith("/api/meet/meet_")
+        assert "active_from" in result
+        assert "active_until" in result
+
+        # Verify Google Calendar API was called with sendUpdates='all' to dispatch invitations
+        mock_events.insert.assert_called_once()
+        call_kwargs = mock_events.insert.call_args[1]
+        assert call_kwargs["sendUpdates"] == "all"
+        assert call_kwargs["conferenceDataVersion"] == 1
+        assert call_kwargs["body"]["attendees"] == [
+            {"email": "client@prospect.fr"},
+            {"email": "directeur@partner.com"}
+        ]
+
+    def test_time_locked_meeting_room_lifecycle(self, client):
+        import datetime
+        from backend.database.connection import SessionLocal
+        from backend.models.meeting import Meeting
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        # 1. Future meeting (Waiting Room state)
+        future_meet_id = "test_meet_future_123"
+        start_future = now + datetime.timedelta(hours=2)
+        end_future = start_future + datetime.timedelta(minutes=45)
+        
+        # 2. Currently active meeting (Active Room state)
+        active_meet_id = "test_meet_active_456"
+        start_active = now - datetime.timedelta(minutes=10)
+        end_active = now + datetime.timedelta(minutes=20)
+        
+        # 3. Past meeting (Expired Room state)
+        past_meet_id = "test_meet_past_789"
+        start_past = now - datetime.timedelta(days=1)
+        end_past = start_past + datetime.timedelta(minutes=30)
+
+        db = SessionLocal()
+        try:
+            # Seed the 3 meetings
+            db.add(Meeting(
+                id=future_meet_id,
+                title="Future Session",
+                start_time=start_future,
+                end_time=end_future,
+                active_from=start_future - datetime.timedelta(minutes=15),
+                active_until=end_future + datetime.timedelta(minutes=30),
+                meet_url="https://meet.google.com/future-room",
+                attendees='["client@test.com"]'
+            ))
+            db.add(Meeting(
+                id=active_meet_id,
+                title="Active Live Session",
+                start_time=start_active,
+                end_time=end_active,
+                active_from=start_active - datetime.timedelta(minutes=15),
+                active_until=end_active + datetime.timedelta(minutes=30),
+                meet_url="https://meet.google.com/active-live-room",
+                attendees='["client@test.com"]'
+            ))
+            db.add(Meeting(
+                id=past_meet_id,
+                title="Past Completed Session",
+                start_time=start_past,
+                end_time=end_past,
+                active_from=start_past - datetime.timedelta(minutes=15),
+                active_until=end_past + datetime.timedelta(minutes=30),
+                meet_url="https://meet.google.com/past-room",
+                attendees='["client@test.com"]'
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        # Test Case A: Future meeting JSON & HTML
+        resp_future_json = client.get(f"/api/meet/{future_meet_id}?format=json")
+        assert resp_future_json.status_code == 200
+        data_future = resp_future_json.get_json()
+        assert data_future["status"] == "waiting"
+        assert data_future["active"] is False
+        assert data_future["seconds_until_active"] > 0
+
+        resp_future_html = client.get(f"/api/meet/{future_meet_id}")
+        assert resp_future_html.status_code == 200
+        assert b"Salle d'attente" in resp_future_html.data
+
+        # Test Case B: Active meeting JSON & HTML
+        resp_active_json = client.get(f"/api/meet/{active_meet_id}?format=json")
+        assert resp_active_json.status_code == 200
+        data_active = resp_active_json.get_json()
+        assert data_active["status"] == "active"
+        assert data_active["active"] is True
+        assert data_active["meet_url"] == "https://meet.google.com/active-live-room"
+
+        resp_active_html = client.get(f"/api/meet/{active_meet_id}")
+        assert resp_active_html.status_code == 200
+        assert b"active-live-room" in resp_active_html.data
+
+        # Test Case C: Expired meeting JSON & HTML
+        resp_past_json = client.get(f"/api/meet/{past_meet_id}?format=json")
+        assert resp_past_json.status_code == 200
+        data_past = resp_past_json.get_json()
+        assert data_past["status"] == "expired"
+        assert data_past["active"] is False
+
+        resp_past_html = client.get(f"/api/meet/{past_meet_id}")
+        assert resp_past_html.status_code == 200
+        assert b"termin" in resp_past_html.data.lower()
+
+        # Test Case D: Non-existent meeting
+        resp_404 = client.get("/api/meet/non_existent_meet_id?format=json")
+        assert resp_404.status_code == 404

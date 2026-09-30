@@ -32,6 +32,9 @@ class MCPClient:
             return result
             
         try:
+            from backend.mcp.google_auth import set_active_execution_id
+            set_active_execution_id(execution_id)
+            
             validate_tool_arguments(arguments, tool.input_schema)
             data = tool.handler(**arguments)
             result = ToolResult(

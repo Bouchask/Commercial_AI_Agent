@@ -9,6 +9,7 @@ from backend.models.document import Document, Template
 from backend.models.execution import Execution, ToolCall, Message
 from backend.models.audit_log import AuditLog
 from backend.models.assignment import Assignment
+from backend.models.meeting import Meeting
 
 __all__ = [
     "Base",
@@ -29,5 +30,6 @@ __all__ = [
     "ToolCall",
     "Message",
     "AuditLog",
-    "Assignment"
+    "Assignment",
+    "Meeting"
 ]
