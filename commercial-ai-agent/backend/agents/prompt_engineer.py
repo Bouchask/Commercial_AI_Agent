@@ -46,14 +46,14 @@ class PromptEngineerAgent:
         - If the user asks to schedule a meeting, you MUST add BOTH "google.calendar.check_availability" AND "google.calendar.create_meeting" to the 'actions' array, in that exact order.
         - MEETING ATTENDEES & INVITATIONS: If the user mentions participants, clients, or email addresses for a meeting (e.g. "avec client1@... et client2@..." or "organise une réunion avec 2 clients et envoie l'invitation"), extract their email addresses into the "attendees" array. If invitations or emails are requested, you MUST ALSO include "email.prepare" and "email.send" in the 'actions' array so direct email invitations with the meeting details and link are sent to the clients!
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
-        - If the Previous Context shows a quote/document was already generated, and the user just asks to send it via email, DO NOT include quote creation actions (like db.create_quote, document.generate) UNLESS they explicitly request a different document format. However, you MUST include "db.find_or_create_client" in the 'actions' array before the email actions to ensure we retrieve the client's email address from the database. Then include "email.prepare" and "email.send", and put the previously generated file_path in "attachments".
+        - CLIENT DETECTION & CREATION: If the user does NOT explicitly specify a client name in their request and NO client was mentioned in the previous context, you MUST set "client": null and you MUST NOT include "db.find_or_create_client" in the 'actions' array. NEVER invent client names like "Client Standard" or "Client", and do not default to the connected user. Only include "db.find_or_create_client" if an actual client name is specified or in context.
         - CRITICAL RULE FOR PROPOSALS/QUESTIONS: If the user asks for advice, a proposal, or prices (e.g. "what do you propose?", "how much?", "je veux créer une app"), this is an INFORMATIONAL question. DO NOT add "db.create_quote", "db.find_or_create_client", or "google.sheets.append_row". You may add "db.get_services" to look up prices, but NEVER create a client or document unless explicitly commanded (e.g. "crée un devis", "fais moi une facture").
         """
     def analyze(self, user_input: str, previous_context: str = "", user_info: str = "") -> Dict[str, Any]:
         """
         Analyzes raw user input and returns a structured JSON intent.
         """
-        prompt = f"Connected User Info (Use this as default client if no client is specified): {user_info}\n\nPrevious Context (Recent conversation history & proposed services):\n{previous_context}\n\nUser request: {user_input}"
+        prompt = f"Connected User Info: {user_info}\n\nPrevious Context (Recent conversation history & proposed services):\n{previous_context}\n\nUser request: {user_input}"
         # We use commercial_reasoning capability for accurate intent extraction
         return self.router.generate_json(
             capability="commercial_reasoning",

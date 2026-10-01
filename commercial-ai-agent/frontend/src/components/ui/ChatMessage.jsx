@@ -311,8 +311,8 @@ export function ChatMessage({ message, onApprove, isLatest, onStreamTick }) {
     }, [args.name, args.email]);
 
     const handleApprove = (isApproved) => {
-      if (isApproved && (!selectedEmail || !selectedEmail.includes('@'))) {
-        alert("Veuillez saisir une adresse e-mail valide avant d'approuver.");
+      if (isApproved && selectedEmail && !selectedEmail.includes('@')) {
+        alert("Si vous renseignez un e-mail, veuillez saisir une adresse e-mail valide.");
         return;
       }
       const newArgs = { ...args };
@@ -404,7 +404,7 @@ export function ChatMessage({ message, onApprove, isLatest, onStreamTick }) {
              <X className="size-3.5" /> Refuser
            </button>
            <button onClick={() => handleApprove(true)} className="inline-flex items-center gap-1.5 rounded-full bg-md-primary px-4 py-1.5 text-xs font-medium text-md-on-primary shadow-sm hover:bg-md-primary/90">
-             <Check className="size-3.5" /> Approuver avec cet email
+             <Check className="size-3.5" /> {selectedEmail ? "Approuver avec cet email" : "Approuver"}
            </button>
         </div>
       </div>

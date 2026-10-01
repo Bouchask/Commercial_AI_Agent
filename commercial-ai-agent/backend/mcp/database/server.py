@@ -77,7 +77,7 @@ def register_database_tools():
                     "total_ttc": {"type": "number"},
                     "status": {"type": "string", "default": "draft"}
                 },
-                "required": ["client_id", "items", "total_ht", "total_tax", "total_ttc"]
+                "required": ["items", "total_ht", "total_tax", "total_ttc"]
             },
             output_schema={
                 "type": "object",

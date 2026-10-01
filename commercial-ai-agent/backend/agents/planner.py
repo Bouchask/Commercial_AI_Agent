@@ -27,11 +27,13 @@ class PlannerAgent:
         CRITICAL Rules:
         - Step "id" MUST be an integer (1, 2, 3, ...), NOT a string.
         - "depends_on" is a list of integer step IDs that must complete before this step.
-        - For clients: ALWAYS use "db.find_or_create_client" (NOT "db.search_client"). You MUST provide the 'name' argument. If the intent specifies a client name, use it. If the intent's client is null or missing, use "Client Standard".
+        - For clients: ONLY use "db.find_or_create_client" if the Intent has an explicit non-null 'client' name or if "db.find_or_create_client" is explicitly listed in the Intent's 'actions'. If the intent's client is null or missing, SKIP "db.find_or_create_client" completely! Do NOT invent a dummy client like "Client Standard".
         - For emails: ONLY use email tools if the user explicitly requested to send an email or if an email address is provided. If used, ALWAYS use "email.prepare" first, then "email.send" (NEVER "email.generate").
         - To prepare quote lines and handle discounts, use "utils.prepare_quote_items" instead of multiple calculate steps.
-        - For every quote creation, the required order is: db.find_or_create_client, utils.prepare_quote_items, db.create_quote, AND THEN generate the document.
-        - IMPORTANT: If the Intent specifies "document_format": "excel", use "document.generate_excel". If it specifies "pdf" or is omitted, use "document.generate". Pass {{stepN.items}}, {{stepN.total_ht}}, {{stepN.tax}} (for the total_tax argument), and {{stepN.total_ttc}} into db.create_quote. Pass the client id and quote id to the document tool as client_id and reference_id.
+        - For quote creation:
+          - If a client is specified: the required order is db.find_or_create_client, utils.prepare_quote_items, db.create_quote (with "client_id": "{{stepN.id}}"), and document.generate (with "client_id": "{{stepN.id}}", "reference_id": "{{stepM.quote_id}}").
+          - If NO client is specified (client is null): DO NOT include db.find_or_create_client! The required order is utils.prepare_quote_items, db.create_quote (omit client_id), and document.generate (omit client_id, pass "reference_id": "{{stepM.quote_id}}").
+        - IMPORTANT: If the Intent specifies "document_format": "excel", use "document.generate_excel". If it specifies "pdf" or is omitted, use "document.generate". Pass {{stepN.items}}, {{stepN.total_ht}}, {{stepN.tax}} (for the total_tax argument), and {{stepN.total_ttc}} into db.create_quote. Pass quote id to the document tool as reference_id (and client_id if a client step was executed).
         - The 'requirements' field from the Intent contains objects like {"service": "SEO", "quantity": 2}. You MUST carefully read the 'Service Catalogue' provided in the prompt and map each requested service to its exact catalogue code (e.g., if the user wants 'pack desk', use 'PACK-DESK'; if mobile pack, use 'PACK-MOB').
         - The 'codes' argument MUST be a JSON array of strings matching the catalogue EXACTLY. Do NOT use a dictionary. NEVER fallback or default to a random code like 'WEB-ECOMM' unless specifically requested.
         - You MUST also pass a 'quantities' dictionary (e.g. {"PACK-DESK": 1}) to 'utils.prepare_quote_items' to properly reflect the requested quantities!
@@ -45,14 +47,16 @@ class PlannerAgent:
         - PLACEHOLDER FORMAT: To reference output from a previous step, you MUST use EXACTLY this format: "{{stepN.key}}" where N is the integer step ID. The word "step" is MANDATORY.
           - CORRECT: "{{step1.id}}", "{{step3.items}}", "{{step3.total_ht}}"
           - WRONG: "{{1.id}}", "{{3.items}}", "{{items}}"
-          - CRITICAL: You MUST reference the correct step! The client_id comes from the db.find_or_create_client step (use "{{step1.id}}" if that was step 1). The items/totals come from the utils.prepare_quote_items step. The quote_id comes from the db.create_quote step. DO NOT mix them up!
+          - CRITICAL: You MUST reference the correct step! The client_id comes from the db.find_or_create_client step (if present). The items/totals come from the utils.prepare_quote_items step. The quote_id comes from the db.create_quote step. DO NOT mix them up!
           - For utils.prepare_quote_items output, the available fields are: items, total_ht, tax (NOT total_tax!), total_ttc, original_subtotal, discount_amount, discount_percent_val
           - For db.find_or_create_client output: id, name, email
           - For db.create_quote output: quote_id
           - For document.generate output: file_path
           - CRITICAL: Even if the tool's input schema says a field expects an 'array' or 'object' (like the 'items' field in db.create_quote), if you are passing a placeholder, you MUST pass it as a raw string! NEVER wrap the placeholder in an array or object. Correct: "items": "{{step2.items}}". Incorrect: "items": ["{{step2.items}}"].
           - For db.create_quote, the 'total_tax' argument must be mapped from prepare_quote_items' 'tax' field: "total_tax": "{{stepN.tax}}"
-        - CONCRETE EXAMPLE: If db.find_or_create_client is step 1, google.sheets.append_row is step 2, utils.prepare_quote_items is step 3, then db.create_quote step 4 should look like: {"client_id": "{{step1.id}}", "items": "{{step3.items}}", "total_ht": "{{step3.total_ht}}", "total_tax": "{{step3.tax}}", "total_ttc": "{{step3.total_ttc}}"}
+        - CONCRETE EXAMPLES:
+          - With client: If db.find_or_create_client is step 1, google.sheets.append_row is step 2, utils.prepare_quote_items is step 3, then db.create_quote step 4 looks like: {"client_id": "{{step1.id}}", "items": "{{step3.items}}", "total_ht": "{{step3.total_ht}}", "total_tax": "{{step3.tax}}", "total_ttc": "{{step3.total_ttc}}"}
+          - Without client: If utils.prepare_quote_items is step 1, then db.create_quote step 2 looks like: {"items": "{{step1.items}}", "total_ht": "{{step1.total_ht}}", "total_tax": "{{step1.tax}}", "total_ttc": "{{step1.total_ttc}}"}
         - For document.generate, ALWAYS omit the "template_name" argument so it uses the system default, or pass exactly "b2b" if required.
         - For 'email.prepare', you MUST provide 'to', 'subject', and 'body' arguments! If 'db.find_or_create_client' is in the plan, you MUST use the placeholder "{{stepN.email}}" for the 'to' argument (where N is the EXACT step ID of the db.find_or_create_client action). NEVER hardcode an email address if a client step exists! Only use a hardcoded email if there is NO client step. You MUST invent an appropriate professional 'subject' and 'body' yourself.
         - For 'google.calendar.check_availability', you MUST execute this BEFORE 'google.calendar.create_meeting' to find a free slot. Determine a target date (use 'meeting_date' from the Intent if present, otherwise default to Current Date + 10 days) and set 'date_start' to 08:00:00 of that day, and 'date_end' to 18:00:00 of that day (in ISO 8601).
@@ -64,10 +68,10 @@ class PlannerAgent:
             - Set 'depends_on' to the ID of the 'google.calendar.create_meeting' step. (Because they depend on the same parent meeting step, the execution engine will execute the emails to both clients in PARALLEL!).
             - In 'email.prepare', set 'to' to the client's email, 'subject' to "Invitation : " + meeting title, and 'body' to an invitation message including the scheduled date, time, and meeting link "{{stepN.link}}" (where N is the create_meeting step ID).
         - Automatic Google Sheets Logging:
-          - If you use 'db.find_or_create_client', you MUST add a step using 'google.sheets.append_row' with sheet_name="Clients" to log the client info. (e.g. values: ["Current Date", "{{step1.name}}", "{{step1.email}}"]). NEVER hardcode the client's name or email here, always use the placeholders from the db.find_or_create_client step output!
+          - ONLY if 'db.find_or_create_client' was executed, add a step using 'google.sheets.append_row' with sheet_name="Clients" to log the client info. (e.g. values: ["Current Date", "{{step1.name}}", "{{step1.email}}"]).
           - If you use 'google.calendar.create_meeting', you MUST add a step using 'google.sheets.append_row' with sheet_name="Meetings" to log the meeting. (e.g. values: ["Current Date", "Title", "Start Time", "Attendees"]).
-          - If you use 'db.create_quote', you MUST add a step using 'google.sheets.append_row' with sheet_name="Factures" to log the quote/invoice with advanced details. (e.g. values: ["Current Date", "{{step1.id}}", "Services list", "Quantities", "{{stepN.total_ht}}", "{{stepN.tax}}", "{{stepN.total_ttc}}", "{{stepN.discount_percent_val}}%"]). Ensure the services and quantities are strings summarizing the items.
-          - Always set 'spreadsheet_id' to null (omit it or leave empty string) so it auto-creates or uses the default.
+          - If you use 'db.create_quote', you MUST add a step using 'google.sheets.append_row' with sheet_name="Factures" to log the quote/invoice with advanced details. (e.g. values: ["Current Date", "Quote/Facture", "Services list", "Quantities", "{{stepN.total_ht}}", "{{stepN.tax}}", "{{stepN.total_ttc}}", "{{stepN.discount_percent_val}}%"]). Ensure the services and quantities are strings summarizing the items.
+        - Always set 'spreadsheet_id' to null (omit it or leave empty string) so it auto-creates or uses the default.
         - Ensure arguments match the expected schema for the tools.
         - All 'client_id', 'quote_id', and 'reference_id' arguments MUST be integers (e.g. 5, not "QTE-123").
         - Do not include explanations, reasoning, or conversational text. Output the valid JSON object ONLY.

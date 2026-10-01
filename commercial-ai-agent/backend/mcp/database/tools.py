@@ -189,14 +189,16 @@ def get_services(codes: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     return [s for s in all_services if s["code"] in requested_codes]
 
 import uuid
-def create_quote(client_id: int, items: List[Dict[str, Any]], total_ht: float, total_tax: float, total_ttc: float, status: str = "draft") -> Dict[str, Any]:
+def create_quote(items: List[Dict[str, Any]], total_ht: float, total_tax: float, total_ttc: float, client_id: Optional[Any] = None, status: str = "draft") -> Dict[str, Any]:
     """Create a quote header and its immutable commercial line items in one transaction."""
     # Type coercion: handle cases where the LLM/interpolation passes wrong types
     if isinstance(client_id, list):
         client_id = client_id[0] if client_id else None
     if isinstance(client_id, dict):
         client_id = client_id.get("id", client_id.get("client_id"))
-    client_id = int(client_id)
+    if client_id is not None and str(client_id).strip() in ("", "None", "null"):
+        client_id = None
+
     total_ht = float(total_ht)
     total_tax = float(total_tax)
     total_ttc = float(total_ttc)
@@ -205,9 +207,27 @@ def create_quote(client_id: int, items: List[Dict[str, Any]], total_ht: float, t
     
     db = get_db_session()
     try:
+        resolved_client_id = None
+        if client_id is not None:
+            try:
+                resolved_client_id = int(client_id)
+            except (ValueError, TypeError):
+                resolved_client_id = None
+
+        # If client_id was omitted (detect client skipped), assign silently to default client without blocking
+        if resolved_client_id is None:
+            user = get_current_user()
+            owner_user_id = user.id if user else None
+            default_client = db.query(Client).filter(Client.name == "Client").first()
+            if not default_client:
+                default_client = Client(name="Client", email=None, owner_user_id=owner_user_id)
+                db.add(default_client)
+                db.flush()
+            resolved_client_id = default_client.id
+
         new_quote = Quote(
             quote_number=f"QTE-{str(uuid.uuid4())[:8].upper()}",
-            client_id=client_id,
+            client_id=resolved_client_id,
             subtotal=total_ht,
             tax_total=total_tax,
             total_amount=total_ttc,
@@ -246,6 +266,7 @@ def create_quote(client_id: int, items: List[Dict[str, Any]], total_ht: float, t
         db.refresh(new_quote)
         return {
             "id": new_quote.id,
+            "quote_id": new_quote.id,
             "quote_number": new_quote.quote_number,
             "status": new_quote.status,
             "items_count": len(items),
