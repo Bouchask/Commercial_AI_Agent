@@ -1011,7 +1011,7 @@ export default function Dashboard({ user, onLogout }) {
 
   const appendResult = (data, fallbackMessages) => {
     if (data.status === "completed") {
-      setMessages([...fallbackMessages, { role: "agent", content: data.response }]);
+      setMessages([...fallbackMessages, { role: "agent", content: data.response, isNew: true }]);
       return;
     }
     if (data.status === "waiting_approval") {
@@ -1020,6 +1020,7 @@ export default function Dashboard({ user, onLogout }) {
         {
           role: "agent",
           content: "Votre validation est requise avant de poursuivre.",
+          isNew: true,
           approval: {
             execution_id: data.execution_id,
             step_id: data.step,
@@ -1032,7 +1033,7 @@ export default function Dashboard({ user, onLogout }) {
     }
     setMessages([
       ...fallbackMessages,
-      { role: "agent", content: `Je n'ai pas pu terminer cette action.\n\n> ${data.error || data.message || "Erreur inconnue"}` },
+      { role: "agent", content: `Je n'ai pas pu terminer cette action.\n\n> ${data.error || data.message || "Erreur inconnue"}`, isNew: true },
     ]);
   };
 
@@ -1076,18 +1077,19 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const data = await requestApi("/api/approve", { ...approval, approved, thread_id: threadId });
       setMessages((current) => {
-        if (data.status === "completed") return [...current, { role: "agent", content: data.response }];
+        if (data.status === "completed") return [...current, { role: "agent", content: data.response, isNew: true }];
         if (data.status === "waiting_approval") {
           return [...current, {
             role: "agent",
             content: "Une autre validation est requise pour continuer.",
+            isNew: true,
             approval: { execution_id: data.execution_id, step_id: data.step, tool: data.tool, arguments: data.arguments },
           }];
         }
-        return [...current, { role: "agent", content: `> ${data.error || data.message || "Action non terminée"}` }];
+        return [...current, { role: "agent", content: `> ${data.error || data.message || "Action non terminée"}`, isNew: true }];
       });
     } catch (error) {
-      setMessages((current) => [...current, { role: "agent", content: `> Erreur de connexion : ${error.message}` }]);
+      setMessages((current) => [...current, { role: "agent", content: `> Erreur de connexion : ${error.message}`, isNew: true }]);
     } finally {
       setIsTyping(false);
     }
@@ -1103,7 +1105,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       appendResult(await requestApi("/api/chat", { prompt: text, thread_id: threadId }), nextMessages);
     } catch (error) {
-      setMessages([...nextMessages, { role: "agent", content: `Erreur: ${error.message}` }]);
+      setMessages([...nextMessages, { role: "agent", content: `Erreur: ${error.message}`, isNew: true }]);
     } finally {
       setIsTyping(false);
       // Refresh the conversations list to update the title if it's a new conversation
@@ -1163,7 +1165,17 @@ export default function Dashboard({ user, onLogout }) {
             {activeView === 'chat' ? (
               <>
                 {messages.map((message, index) => (
-                  <ChatMessage key={`${message.role}-${index}`} message={message} onApprove={handleApprove} />
+                  <ChatMessage 
+                    key={`${message.role}-${index}`} 
+                    message={message} 
+                    isLatest={index === messages.length - 1}
+                    onApprove={handleApprove}
+                    onStreamTick={() => {
+                      if (scrollRef.current) {
+                        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                      }
+                    }}
+                  />
                 ))}
 
                 {messages.length === 1 && !isTyping && (

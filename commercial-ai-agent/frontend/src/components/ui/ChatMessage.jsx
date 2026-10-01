@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, ShieldCheck, Sparkles, X, Calendar, Table } from "lucide-react";
+import { Check, ShieldCheck, Sparkles, X, Calendar, Table, Video } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ExcelViewer } from "./ExcelViewer";
 
@@ -48,7 +48,62 @@ function SecureIframe({ url, title }) {
   return <iframe src={blobUrl} className="w-full h-full border-0" title={title} />;
 }
 
-export function ChatMessage({ message, onApprove }) {
+/**
+ * Hook providing a ChatGPT-style progressive token/character typewriter animation.
+ * Streams in smooth increments, scrolls smoothly, and allows immediate click-to-skip.
+ */
+function useTypewriter(content, shouldAnimate, onTick) {
+  const [displayedText, setDisplayedText] = useState(() => (shouldAnimate ? "" : (content || "")));
+  const [isStreaming, setIsStreaming] = useState(() => Boolean(shouldAnimate && content));
+  const hasAnimatedRef = useRef(!shouldAnimate);
+
+  useEffect(() => {
+    if (!shouldAnimate || hasAnimatedRef.current || !content) {
+      setDisplayedText(content || "");
+      setIsStreaming(false);
+      return;
+    }
+
+    setIsStreaming(true);
+    let index = 0;
+    const totalLength = content.length;
+
+    // ChatGPT token pacing:
+    // Pacing matches natural token streaming:
+    // - Short text (< 120 chars): 1-2 chars per tick (~16ms)
+    // - Medium text (120 - 400 chars): 2-3 chars per tick (~14ms)
+    // - Longer text (> 400 chars): 3-5 chars per tick (~12ms)
+    const stepSize = totalLength > 600 ? 5 : totalLength > 250 ? 3 : totalLength > 80 ? 2 : 1;
+    const intervalMs = totalLength > 400 ? 12 : 16;
+
+    const timer = setInterval(() => {
+      index = Math.min(index + stepSize, totalLength);
+      setDisplayedText(content.slice(0, index));
+      if (onTick) onTick();
+
+      if (index >= totalLength) {
+        clearInterval(timer);
+        setIsStreaming(false);
+        hasAnimatedRef.current = true;
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [content, shouldAnimate, onTick]);
+
+  const skip = () => {
+    if (isStreaming) {
+      setDisplayedText(content);
+      setIsStreaming(false);
+      hasAnimatedRef.current = true;
+      if (onTick) onTick();
+    }
+  };
+
+  return { displayedText, isStreaming, skip };
+}
+
+export function ChatMessage({ message, onApprove, isLatest, onStreamTick }) {
   const isUser = message.role === "user";
 
   /* ── User Bubble (MD3 Secondary Container) ── */
@@ -357,37 +412,52 @@ export function ChatMessage({ message, onApprove }) {
   };
 
   /* ── Agent Message ── */
+  const shouldAnimate = message.role === "agent" && Boolean(message.isNew);
+  const { displayedText, isStreaming, skip } = useTypewriter(message.content, shouldAnimate, onStreamTick);
+
   return (
     <article className="flex gap-3 py-4 sm:gap-4 sm:py-5">
       <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-md-primary text-white shadow-sm">
         <Sparkles className="size-3.5" />
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="agent-markdown text-[15px] leading-7 text-md-on-surface">
+        <div 
+          className="agent-markdown text-[15px] leading-7 text-md-on-surface cursor-pointer select-text"
+          onClick={skip}
+          title={isStreaming ? "Cliquer pour afficher tout le texte immédiatement" : undefined}
+        >
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
               a: ({node, ...props}) => {
                 const isCalendar = props.href?.includes('calendar.google.com');
                 const isSheets = props.href?.includes('docs.google.com/spreadsheets');
+                const isMeet = props.href?.includes('/api/meet/') || props.href?.includes('meet.google.com') || props.href?.includes('meet.jit.si');
                 
                 return (
                   <a href={props.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-md-primary-container px-3.5 py-1.5 text-[13px] font-medium text-md-on-primary-container hover:bg-md-primary hover:text-md-on-primary transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] my-2 shadow-sm active:scale-95">
-                    {isCalendar && <Calendar className="size-3.5" />}
-                    {isSheets && <Table className="size-3.5" />}
-                    {isCalendar ? "Ouvrir dans Google Agenda" : isSheets ? "Ouvrir dans Google Sheets" : "Ouvrir le lien"}
+                    {isMeet ? <Video className="size-3.5" /> : isCalendar ? <Calendar className="size-3.5" /> : isSheets ? <Table className="size-3.5" /> : null}
+                    {isMeet ? "Rejoindre la réunion Meet" : isCalendar ? "Ouvrir dans Google Agenda" : isSheets ? "Ouvrir dans Google Sheets" : "Ouvrir le lien"}
                   </a>
                 );
               }
             }}
           >
-            {message.content}
+            {displayedText}
           </ReactMarkdown>
+          {isStreaming && (
+            <span className="chatgpt-cursor" aria-label="Génération de texte en cours..." />
+          )}
         </div>
 
         {/* ── Approval Card (MD3 Surface + Tertiary accent) ── */}
         {message.approval && (
-          <section className="mt-4 rounded-3xl bg-md-surface-container border border-md-tertiary/20 p-5 shadow-sm">
+          <motion.section 
+            initial={shouldAnimate ? { opacity: 0, y: 10 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="mt-4 rounded-3xl bg-md-surface-container border border-md-tertiary/20 p-5 shadow-sm"
+          >
             <div className="flex items-start gap-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-md-tertiary-container text-md-tertiary"><ShieldCheck className="size-4" /></span>
               <div>
@@ -509,7 +579,7 @@ export function ChatMessage({ message, onApprove }) {
                 )}
               </div>
             )}
-          </section>
+          </motion.section>
         )}
       </div>
     </article>
