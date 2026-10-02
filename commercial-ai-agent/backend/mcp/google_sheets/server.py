@@ -8,7 +8,7 @@ def register_google_sheets_tools() -> None:
             name="google.sheets.append_row",
             description="Append a row of data to a specific Google Spreadsheet.",
             handler=append_row,
-            requires_approval=True,
+            requires_approval=False,
             input_schema={
                 "type": "object",
                 "properties": {

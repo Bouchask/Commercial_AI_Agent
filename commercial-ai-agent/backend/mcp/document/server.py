@@ -10,7 +10,7 @@ def register_document_tools():
             input_schema={
                 "type": "object",
                 "properties": {
-                    "document_type": {"type": "string", "enum": ["quote"]},
+                    "document_type": {"type": "string", "enum": ["quote", "invoice"]},
                     "client_name": {"type": "string"},
                     "items": {
                         "type": "array",
@@ -45,8 +45,8 @@ def register_document_tools():
                     "document_id": {"type": "integer"}
                 }
             },
-            risk_level="medium",
-            requires_approval=True,
+            risk_level="low",
+            requires_approval=False,
             handler=generate_document
         )
     )
@@ -58,7 +58,7 @@ def register_document_tools():
             input_schema={
                 "type": "object",
                 "properties": {
-                    "document_type": {"type": "string", "enum": ["quote"]},
+                    "document_type": {"type": "string", "enum": ["quote", "invoice"]},
                     "client_name": {"type": "string"},
                     "items": {"type": "array", "items": {"type": "object"}},
                     "total_ht": {"type": "number"},
@@ -83,7 +83,7 @@ def register_document_tools():
                 }
             },
             risk_level="low",
-            requires_approval=True,
+            requires_approval=False,
             handler=generate_excel_document
         )
     )

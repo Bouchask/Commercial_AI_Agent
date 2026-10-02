@@ -31,9 +31,16 @@ class PlannerAgent:
         - For emails: ONLY use email tools if the user explicitly requested to send an email or if an email address is provided. If used, ALWAYS use "email.prepare" first, then "email.send" (NEVER "email.generate").
         - To prepare quote lines and handle discounts, use "utils.prepare_quote_items" instead of multiple calculate steps.
         - For quote creation:
-          - If a client is specified: the required order is db.find_or_create_client, utils.prepare_quote_items, db.create_quote (with "client_id": "{{stepN.id}}"), and document.generate (with "client_id": "{{stepN.id}}", "reference_id": "{{stepM.quote_id}}").
-          - If NO client is specified (client is null): DO NOT include db.find_or_create_client! The required order is utils.prepare_quote_items, db.create_quote (omit client_id), and document.generate (omit client_id, pass "reference_id": "{{stepM.quote_id}}").
+          - If a client is specified: the required order is db.find_or_create_client, utils.prepare_quote_items, db.create_quote (with "client_id": "{{stepN.id}}"), and document.generate (with "document_type": "quote", "client_id": "{{stepN.id}}", "reference_id": "{{stepM.quote_id}}").
+          - If NO client is specified (client is null): DO NOT include db.find_or_create_client! The required order is utils.prepare_quote_items, db.create_quote (omit client_id), and document.generate (with "document_type": "quote", omit client_id, pass "reference_id": "{{stepM.quote_id}}").
         - IMPORTANT: If the Intent specifies "document_format": "excel", use "document.generate_excel". If it specifies "pdf" or is omitted, use "document.generate". Pass {{stepN.items}}, {{stepN.total_ht}}, {{stepN.tax}} (for the total_tax argument), and {{stepN.total_ttc}} into db.create_quote. Pass quote id to the document tool as reference_id (and client_id if a client step was executed).
+        - DOCUMENT TYPE & SHEET NAMING (DEVIS VS FACTURE):
+          - When creating a devis/quote (intent "document_type" is "quote" or intent is "create_quote"):
+            - For document.generate, you MUST pass "document_type": "quote". NEVER pass "invoice"!
+            - For google.sheets.append_row, use sheet_name="Devis" (NEVER "Factures"!). Values: ["Current Date", "Devis", "Services list", "Quantities", "{{stepN.total_ht}}", "{{stepN.tax}}", "{{stepN.total_ttc}}", "{{stepN.discount_percent_val}}%"].
+          - Only if the user explicitly commanded an invoice/facture (intent "document_type" is "invoice" or intent is "create_invoice"):
+            - For document.generate, pass "document_type": "invoice".
+            - For google.sheets.append_row, use sheet_name="Factures". Values: ["Current Date", "Facture", ...].
         - The 'requirements' field from the Intent contains objects like {"service": "SEO", "quantity": 2}. You MUST carefully read the 'Service Catalogue' provided in the prompt and map each requested service to its exact catalogue code (e.g., if the user wants 'pack desk', use 'PACK-DESK'; if mobile pack, use 'PACK-MOB').
         - The 'codes' argument MUST be a JSON array of strings matching the catalogue EXACTLY. Do NOT use a dictionary. NEVER fallback or default to a random code like 'WEB-ECOMM' unless specifically requested.
         - You MUST also pass a 'quantities' dictionary (e.g. {"PACK-DESK": 1}) to 'utils.prepare_quote_items' to properly reflect the requested quantities!
@@ -70,7 +77,7 @@ class PlannerAgent:
         - Automatic Google Sheets Logging:
           - ONLY if 'db.find_or_create_client' was executed, add a step using 'google.sheets.append_row' with sheet_name="Clients" to log the client info. (e.g. values: ["Current Date", "{{step1.name}}", "{{step1.email}}"]).
           - If you use 'google.calendar.create_meeting', you MUST add a step using 'google.sheets.append_row' with sheet_name="Meetings" to log the meeting. (e.g. values: ["Current Date", "Title", "Start Time", "Attendees"]).
-          - If you use 'db.create_quote', you MUST add a step using 'google.sheets.append_row' with sheet_name="Factures" to log the quote/invoice with advanced details. (e.g. values: ["Current Date", "Quote/Facture", "Services list", "Quantities", "{{stepN.total_ht}}", "{{stepN.tax}}", "{{stepN.total_ttc}}", "{{stepN.discount_percent_val}}%"]). Ensure the services and quantities are strings summarizing the items.
+          - If you use 'db.create_quote', add a step using 'google.sheets.append_row' with sheet_name="Devis" (if quote/devis) or sheet_name="Factures" (if invoice/facture) to log with advanced details. (e.g. values: ["Current Date", "Devis" (or "Facture"), "Services list", "Quantities", "{{stepN.total_ht}}", "{{stepN.tax}}", "{{stepN.total_ttc}}", "{{stepN.discount_percent_val}}%"]). Ensure the services and quantities are strings summarizing the items.
         - Always set 'spreadsheet_id' to null (omit it or leave empty string) so it auto-creates or uses the default.
         - Ensure arguments match the expected schema for the tools.
         - All 'client_id', 'quote_id', and 'reference_id' arguments MUST be integers (e.g. 5, not "QTE-123").

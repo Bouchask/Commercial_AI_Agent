@@ -7,6 +7,7 @@ from backend.services.document_validation import DocumentValidator
 from backend.database.connection import SessionLocal
 from backend.models.client import Client
 from backend.models.document import Document
+from backend.models.quote import Quote
 
 def generate_document(
     document_type: str,
@@ -34,7 +35,13 @@ def generate_document(
     # and return the generated filepath or ID
     
     # Resolve client_name and client_id dynamically
-    resolved_client_id = int(client_id) if client_id is not None else None
+    resolved_client_id = None
+    if client_id is not None and str(client_id).strip() not in ("", "None", "null"):
+        try:
+            resolved_client_id = int(client_id)
+        except (ValueError, TypeError):
+            resolved_client_id = None
+
     resolved_client_name = client_name
     
     db = SessionLocal()
@@ -47,6 +54,27 @@ def generate_document(
             client = db.query(Client).filter(Client.name == resolved_client_name).first()
             if client:
                 resolved_client_id = client.id
+
+        if resolved_client_id is None and reference_id is not None:
+            try:
+                quote = db.query(Quote).filter(Quote.id == int(reference_id)).first()
+                if quote and quote.client_id:
+                    resolved_client_id = quote.client_id
+                    if not resolved_client_name or resolved_client_name == "Client":
+                        c = db.query(Client).filter(Client.id == quote.client_id).first()
+                        if c:
+                            resolved_client_name = c.name
+            except Exception:
+                pass
+
+        if resolved_client_id is None:
+            default_client = db.query(Client).filter(Client.name == "Client").first()
+            if not default_client:
+                default_client = Client(name="Client", email=None)
+                db.add(default_client)
+                db.commit()
+                db.refresh(default_client)
+            resolved_client_id = default_client.id
                 
         if not resolved_client_name:
             resolved_client_name = "Client" # Fallback if totally unknown
@@ -86,8 +114,6 @@ def generate_document(
     # execution process has finished.
     db = SessionLocal()
     try:
-        if resolved_client_id is None:
-            raise ValueError("A generated document must be linked to an existing client.")
         with open(pdf_path, "rb") as f:
             file_content = f.read()
             
@@ -137,7 +163,13 @@ def generate_excel_document(
         raise ValueError("Only quote documents are available in this MVP.")
     
     # Resolve client_name, client_id, and client_email dynamically
-    resolved_client_id = int(client_id) if client_id is not None else None
+    resolved_client_id = None
+    if client_id is not None and str(client_id).strip() not in ("", "None", "null"):
+        try:
+            resolved_client_id = int(client_id)
+        except (ValueError, TypeError):
+            resolved_client_id = None
+
     resolved_client_name = client_name
     client_email = "noemail"
     
@@ -153,6 +185,28 @@ def generate_excel_document(
             if client:
                 resolved_client_id = client.id
                 client_email = client.email or client_email
+
+        if resolved_client_id is None and reference_id is not None:
+            try:
+                quote = db.query(Quote).filter(Quote.id == int(reference_id)).first()
+                if quote and quote.client_id:
+                    resolved_client_id = quote.client_id
+                    c = db.query(Client).filter(Client.id == quote.client_id).first()
+                    if c:
+                        if not resolved_client_name or resolved_client_name == "Client":
+                            resolved_client_name = c.name
+                        client_email = c.email or client_email
+            except Exception:
+                pass
+
+        if resolved_client_id is None:
+            default_client = db.query(Client).filter(Client.name == "Client").first()
+            if not default_client:
+                default_client = Client(name="Client", email=None)
+                db.add(default_client)
+                db.commit()
+                db.refresh(default_client)
+            resolved_client_id = default_client.id
                 
         if not resolved_client_name:
             resolved_client_name = "Client" # Fallback if totally unknown
@@ -184,8 +238,6 @@ def generate_excel_document(
     # Record the generated artifact
     db = SessionLocal()
     try:
-        if resolved_client_id is None:
-            raise ValueError("A generated document must be linked to an existing client.")
         with open(excel_path, "rb") as f:
             file_content = f.read()
             

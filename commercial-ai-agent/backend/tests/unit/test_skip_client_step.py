@@ -103,3 +103,30 @@ def test_planner_plan_without_client():
     step_tools = [s["tool"] for s in plan["steps"]]
     assert "db.find_or_create_client" not in step_tools
     assert "db.create_quote" in step_tools
+
+def test_generate_document_without_client_id_succeeds(monkeypatch):
+    from backend.models.base import Base
+    from backend.database.connection import engine
+    from backend.mcp.document.tools import generate_document
+    Base.metadata.create_all(bind=engine)
+    
+    # Mock compile_pdf and validate_pdf to avoid pdflatex dependencies in unit tests
+    monkeypatch.setattr("backend.services.latex_service.LatexService.compile_pdf", lambda self, tex, doc_type: "/tmp/fake_quote.pdf")
+    monkeypatch.setattr("backend.services.document_validation.DocumentValidator.validate_pdf", lambda path, ctx: (True, None))
+    # Write a dummy byte to /tmp/fake_quote.pdf so it can be read
+    with open("/tmp/fake_quote.pdf", "wb") as f:
+        f.write(b"%PDF-1.4 dummy")
+
+    result = generate_document(
+        document_type="quote",
+        items=[{"description": "Web Development", "quantity": 1, "price": 1000.0}],
+        total_ht=1000.0,
+        tax=200.0,
+        total_ttc=1200.0,
+        client_id=None,
+        client_name=None,
+        reference_id=None
+    )
+    assert result is not None
+    assert result.get("success") is True
+    assert result.get("document_id") is not None

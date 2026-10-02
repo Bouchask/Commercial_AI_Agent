@@ -477,7 +477,7 @@ export function ChatMessage({ message, onApprove, isLatest, onStreamTick }) {
                     <h3 className="text-lg font-medium text-md-on-surface uppercase tracking-widest">
                       {message.approval.arguments.document_type === 'invoice' ? 'Facture' : 'Devis'}
                     </h3>
-                    <p className="text-md-on-surface-variant mt-1">{message.approval.arguments.client_name || `Client #${message.approval.arguments.client_id || 'N/A'}`}</p>
+                    <p className="text-md-on-surface-variant mt-1">{message.approval.arguments.client_name || (message.approval.arguments.client_id ? `Client #${message.approval.arguments.client_id}` : 'Client : Non spécifié')}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-md-on-surface-variant text-xs uppercase tracking-wider mb-0.5">Montant TTC</p>
