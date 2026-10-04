@@ -66,6 +66,12 @@ class PlannerAgent:
           - Without client: If utils.prepare_quote_items is step 1, then db.create_quote step 2 looks like: {"items": "{{step1.items}}", "total_ht": "{{step1.total_ht}}", "total_tax": "{{step1.tax}}", "total_ttc": "{{step1.total_ttc}}"}
         - For document.generate, ALWAYS omit the "template_name" argument so it uses the system default, or pass exactly "b2b" if required.
         - For 'email.prepare', you MUST provide 'to', 'subject', and 'body' arguments! If 'db.find_or_create_client' is in the plan, you MUST use the placeholder "{{stepN.email}}" for the 'to' argument (where N is the EXACT step ID of the db.find_or_create_client action). NEVER hardcode an email address if a client step exists! Only use a hardcoded email if there is NO client step. You MUST invent an appropriate professional 'subject' and 'body' yourself.
+        - SENDING PREVIOUSLY GENERATED QUOTES OR EMAILS TO A NAMED CLIENT:
+          - If the user asks to send an existing quote or email to a named client (e.g. "envoyes devis a yahya qassifi" where intent has "client": "<name>"):
+            - The first step MUST be "db.find_or_create_client" with arguments: {"name": "<client name from intent>"}.
+            - Then "email.prepare" MUST use "to": "{{stepN.email}}" (where N is the ID of the db.find_or_create_client step), and pass the file path in "attachments". Depends on [N].
+            - Then "email.send" with the same arguments, depending on the email.prepare step.
+            - CRITICAL: NEVER skip "db.find_or_create_client" and NEVER invent or hallucinate fake emails like "@example.com"! The real client email MUST be retrieved from the database via "db.find_or_create_client".
         - For 'google.calendar.check_availability', you MUST execute this BEFORE 'google.calendar.create_meeting' to find a free slot. Determine a target date (use 'meeting_date' from the Intent if present, otherwise default to Current Date + 10 days) and set 'date_start' to 08:00:00 of that day, and 'date_end' to 18:00:00 of that day (in ISO 8601).
         - For 'google.calendar.create_meeting', use it when the user explicitly requests to schedule or plan a meeting. You must provide a 'title' and 'start_time' (in ISO 8601 format). Calculate the start_time intelligently: Use 'meeting_date' and 'meeting_time' from the Intent if provided. If 'meeting_date' is null, default to the target date (Current Date + 10 days). If 'meeting_time' is null, pick a logical default (e.g. 10:00 AM) but if previous context or the result of check_availability indicates it's busy, pick the next available slot! Ensure correct year and month based on the Current Date. If attendees are provided in the Intent (e.g. 2 client emails), pass them in the 'attendees' argument array!
         - MEETING INVITATIONS TO CLIENTS: When a meeting is created and attendees/clients are specified (e.g. 2 client emails), or when the user asks to send meeting invitations by email:
@@ -102,7 +108,11 @@ class PlannerAgent:
         # Optimize tools list to reduce token usage
         intent_actions = intent.get("actions", [])
         if intent_actions:
-            filtered_tools = [t for t in available_tools if t.get("name") in intent_actions]
+            tools_to_include = set(intent_actions)
+            # If a client is specified in intent, ensure db.find_or_create_client is available
+            if intent.get("client"):
+                tools_to_include.add("db.find_or_create_client")
+            filtered_tools = [t for t in available_tools if t.get("name") in tools_to_include]
             # Always ensure some essential tools are present if the list is empty
             if not filtered_tools:
                 essential_tools = [

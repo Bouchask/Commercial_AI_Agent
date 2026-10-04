@@ -130,3 +130,137 @@ def test_generate_document_without_client_id_succeeds(monkeypatch):
     assert result is not None
     assert result.get("success") is True
     assert result.get("document_id") is not None
+
+def test_planner_includes_client_lookup_when_sending_email_to_named_client():
+    mock_router = MagicMock()
+    mock_router.generate_json.return_value = {
+        "steps": [
+            {
+                "id": 1,
+                "tool": "db.find_or_create_client",
+                "arguments": {"name": "yahya qassifi"},
+                "depends_on": []
+            },
+            {
+                "id": 2,
+                "tool": "email.prepare",
+                "arguments": {
+                    "to": "{{step1.email}}",
+                    "subject": "Votre devis",
+                    "body": "Bonjour Yahya...",
+                    "attachments": ["data/quotes/quote_1.pdf"]
+                },
+                "depends_on": [1]
+            },
+            {
+                "id": 3,
+                "tool": "email.send",
+                "arguments": {
+                    "to": "{{step1.email}}",
+                    "subject": "Votre devis",
+                    "body": "Bonjour Yahya...",
+                    "attachments": ["data/quotes/quote_1.pdf"]
+                },
+                "depends_on": [2]
+            }
+        ]
+    }
+    planner = PlannerAgent(mock_router)
+    intent = {
+        "intent": "send_email",
+        "client": "yahya qassifi",
+        "actions": ["email.prepare", "email.send"]
+    }
+    available_tools = [
+        {"name": "utils.prepare_quote_items"},
+        {"name": "db.create_quote"},
+        {"name": "document.generate"},
+        {"name": "db.find_or_create_client"},
+        {"name": "email.prepare"},
+        {"name": "email.send"}
+    ]
+    plan = planner.plan(intent=intent, available_tools=available_tools, user_input="ok , envoyes devis a yahya qassifi")
+    
+    # Check that db.find_or_create_client was in the tools passed to the prompt
+    assert mock_router.generate_json.called
+    call_prompt = mock_router.generate_json.call_args.kwargs["prompt"]
+    assert "db.find_or_create_client" in call_prompt
+    step_tools = [s["tool"] for s in plan["steps"]]
+    assert "db.find_or_create_client" in step_tools
+    assert plan["steps"][1]["arguments"]["to"] == "{{step1.email}}"
+
+def test_email_prepare_and_send_links_attachments_to_recipient_client(monkeypatch, tmp_path):
+    from backend.models.base import Base
+    from backend.database.connection import SessionLocal, engine
+    from backend.models.client import Client
+    from backend.models.document import Document
+    from backend.models.quote import Quote
+    from backend.mcp.email.tools import prepare_email
+    import os
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        # Create a client
+        client = Client(name="Yahya Qassifi", email="mr.bouchakyahya@gmail.com")
+        db.add(client)
+        
+        # Create another default client
+        default_client = Client(name="Client", email=None)
+        db.add(default_client)
+        db.commit()
+        db.refresh(client)
+        db.refresh(default_client)
+
+        # Create a quote assigned to default_client
+        quote = Quote(
+            quote_number="QTE-TEST1234",
+            client_id=default_client.id,
+            subtotal=1000.0,
+            tax_total=200.0,
+            total_amount=1200.0,
+            status="DRAFT"
+        )
+        db.add(quote)
+        db.commit()
+        db.refresh(quote)
+
+        # Create a dummy attachment file in the managed data folder
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        data_dir = os.path.join(project_root, "data")
+        os.makedirs(data_dir, exist_ok=True)
+        test_file = os.path.join(data_dir, "test_quote_attach.pdf")
+        with open(test_file, "wb") as f:
+            f.write(b"%PDF-1.4 test")
+
+        # Create document record
+        doc = Document(
+            filename="test_quote_attach.pdf",
+            filepath=test_file,
+            document_type="quote",
+            reference_id=quote.id,
+            client_id=default_client.id
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+
+        # Run prepare_email with recipient mr.bouchakyahya@gmail.com
+        res = prepare_email(
+            to="mr.bouchakyahya@gmail.com",
+            subject="Votre devis",
+            body="Bonjour",
+            attachments=[test_file]
+        )
+        assert res["status"] == "prepared"
+
+        # Verify that doc and quote are now linked to Yahya (client.id)
+        db.refresh(doc)
+        db.refresh(quote)
+        assert doc.client_id == client.id
+        assert quote.client_id == client.id
+    finally:
+        db.close()
+        if os.path.exists(test_file):
+            os.remove(test_file)
+

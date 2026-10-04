@@ -29,7 +29,13 @@ if os.environ.get("VERCEL") == "1" and not database_url.startswith("sqlite"):
 
 if database_url.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
-    engine_kwargs["poolclass"] = QueuePool
+    if ":memory:" in database_url:
+        from sqlalchemy.pool import StaticPool
+        engine_kwargs["poolclass"] = StaticPool
+        for key in ("pool_size", "max_overflow", "pool_timeout", "pool_recycle"):
+            engine_kwargs.pop(key, None)
+    else:
+        engine_kwargs["poolclass"] = QueuePool
 
 engine = create_engine(database_url, **engine_kwargs)
 

@@ -47,6 +47,44 @@ def _validate_attachment_path(filepath: str) -> str:
         
     return resolved_path
 
+def _link_attachments_to_recipient(to_email: str, attachment_paths: List[str], mark_sent: bool = False):
+    """Link attached quote and document records to the recipient client in the database."""
+    if not to_email or not attachment_paths:
+        return
+    try:
+        from backend.database.connection import SessionLocal
+        from backend.models.client import Client
+        from backend.models.document import Document
+        from backend.models.quote import Quote
+        
+        db = SessionLocal()
+        try:
+            client = db.query(Client).filter(Client.email.ilike(to_email.strip())).first()
+            if not client:
+                return
+            for path in attachment_paths:
+                resolved_path = os.path.realpath(path)
+                doc = db.query(Document).filter(Document.filepath == resolved_path).first()
+                if not doc:
+                    fname = os.path.basename(resolved_path)
+                    doc = db.query(Document).filter(Document.filename == fname).first()
+                if doc:
+                    if doc.client_id != client.id:
+                        doc.client_id = client.id
+                    if doc.reference_id and doc.document_type == "quote":
+                        quote = db.query(Quote).filter(Quote.id == doc.reference_id).first()
+                        if quote:
+                            if quote.client_id != client.id:
+                                quote.client_id = client.id
+                            if mark_sent and quote.status != "SENT":
+                                quote.status = "SENT"
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Could not link attachments to recipient client: {e}")
+
 # Note: email.prepare just formats and validates the email intent.
 # email.send actually sends it and is marked with requires_approval=True in the registry.
 
@@ -69,6 +107,8 @@ def prepare_email(
         for att in attachments:
             valid_attachments.append(_validate_attachment_path(att))
                 
+    _link_attachments_to_recipient(to, valid_attachments, mark_sent=False)
+
     return {
         "status": "prepared",
         "to": to,
@@ -126,7 +166,7 @@ def send_email(
             body_payload = {'raw': raw_message}
             
             sent_message = service.users().messages().send(userId='me', body=body_payload).execute()
-            
+            _link_attachments_to_recipient(to, attachments or [], mark_sent=True)
             return {
                 "status": "success",
                 "message": "Email sent successfully via Gmail",
@@ -148,6 +188,7 @@ def send_email(
             print("Failed to send via Gmail API, and SMTP credentials are not configured. Falling back to simulation.")
         else:
             print("Google authentication not found, and SMTP credentials are not configured. Falling back to simulation.")
+        _link_attachments_to_recipient(to, attachments or [], mark_sent=True)
         return {
             "status": "success",
             "message": "Email sending simulated successfully (no credentials configured)",
@@ -170,6 +211,7 @@ def send_email(
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
                 server.quit()
+                _link_attachments_to_recipient(to, attachments or [], mark_sent=True)
                 return {
                     "status": "success",
                     "message": "Email sent successfully via SMTP fallback",

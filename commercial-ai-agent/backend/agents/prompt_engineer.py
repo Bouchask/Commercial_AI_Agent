@@ -46,7 +46,21 @@ class PromptEngineerAgent:
         - If the user asks to schedule a meeting, you MUST add BOTH "google.calendar.check_availability" AND "google.calendar.create_meeting" to the 'actions' array, in that exact order.
         - MEETING ATTENDEES & INVITATIONS: If the user mentions participants, clients, or email addresses for a meeting (e.g. "avec client1@... et client2@..." or "organise une réunion avec 2 clients et envoie l'invitation"), extract their email addresses into the "attendees" array. If invitations or emails are requested, you MUST ALSO include "email.prepare" and "email.send" in the 'actions' array so direct email invitations with the meeting details and link are sent to the clients!
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
-        - CLIENT DETECTION & CREATION: If the user does NOT explicitly specify a client name in their request and NO client was mentioned in the previous context, you MUST set "client": null and you MUST NOT include "db.find_or_create_client" in the 'actions' array. NEVER invent client names like "Client Standard" or "Client", and do not default to the connected user. Only include "db.find_or_create_client" if an actual client name is specified or in context.
+        - SENDING PREVIOUSLY GENERATED QUOTES BY EMAIL:
+          If the Previous Context shows a quote/document was already generated, and the user asks to send it via email (e.g. "ok , envoyes devis a yahya qassifi", "envoie le devis à [client]"):
+          - DO NOT include quote creation actions (like db.create_quote, document.generate).
+          - If a client name is specified in the request (e.g. "yahya qassifi", "client Acme"):
+            - Set "client": "<exact client name>".
+            - You MUST include "db.find_or_create_client" in the 'actions' array as the FIRST action, before "email.prepare" and "email.send". This is MANDATORY so the agent searches the database for that client and retrieves their registered email address!
+          - Then include "email.prepare" and "email.send", and put the previously generated file_path in "attachments".
+        - CLIENT DETECTION & CREATION:
+          - If the user explicitly specifies or mentions ANY client name in their request (e.g. "pour yahya qassifi", "a yahya qassifi", "au client Dupont", "pour l'entreprise Acme") OR if an actual client was established in previous context:
+            - You MUST extract the exact client name in the "client" field.
+            - You MUST include "db.find_or_create_client" in the 'actions' array so the client is searched, retrieved, or created in the database.
+          - ONLY if the user does NOT explicitly specify any client name in their request or context (e.g. "generate devis pour pack web"):
+            - Set "client": null.
+            - Do NOT include "db.find_or_create_client" in the 'actions' array (skip client detection).
+            - NEVER invent client names like "Client Standard" or "Client", and do not default to the connected user.
         - CRITICAL RULE FOR PROPOSALS/QUESTIONS: If the user asks for advice, a proposal, or prices (e.g. "what do you propose?", "how much?", "je veux créer une app"), this is an INFORMATIONAL question. DO NOT add "db.create_quote", "db.find_or_create_client", or "google.sheets.append_row". You may add "db.get_services" to look up prices, but NEVER create a client or document unless explicitly commanded (e.g. "crée un devis", "fais moi une facture").
         """
     def analyze(self, user_input: str, previous_context: str = "", user_info: str = "") -> Dict[str, Any]:
