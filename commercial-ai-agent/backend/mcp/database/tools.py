@@ -346,7 +346,8 @@ def create_service(name: str, unit_price: float, description: Optional[str] = No
             code=code,
             name=name,
             description=description,
-            unit_price=float(unit_price)
+            unit_price=float(unit_price),
+            tax_rate=0.20
         )
         db.add(service)
         db.commit()

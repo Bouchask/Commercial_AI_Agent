@@ -115,6 +115,9 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
                 (value for key, value in custom_descriptions.items() if normalize_code(key) == canonical_code),
                 s.get("name", "Unknown"),
             )
+        item_tax_rate = float(s.get("tax_rate", tax_rate))
+        if item_tax_rate > 1.0:
+            item_tax_rate = item_tax_rate / 100.0
         items.append({
             "service_id": s["id"],
             "code": canonical_code,
@@ -122,7 +125,7 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
             "quantity": qty,
             "price": price,
             "line_total": line_total,
-            "tax_rate": s.get("tax_rate", tax_rate),
+            "tax_rate": item_tax_rate,
         })
         subtotal += line_total
         
@@ -131,7 +134,7 @@ def prepare_quote_items(codes: List[str], quantities: Dict[str, int] = None, cus
     subtotal_discounted = subtotal - discount_amount
     # A catalogue item may define a tax rate different from the request default.
     # Apply the global discount proportionally before calculating each line's tax.
-    tax = sum(item["line_total"] * (1 - discount_percent) * float(item["tax_rate"]) for item in items)
+    tax = sum(item["line_total"] * (1 - discount_percent) * (float(item["tax_rate"]) / 100.0 if float(item["tax_rate"]) > 1.0 else float(item["tax_rate"])) for item in items)
     total = subtotal_discounted + tax
     
     return {

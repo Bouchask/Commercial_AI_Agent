@@ -30,7 +30,7 @@ class Service(Base):
     unit = Column(String, default="unit")
     unit_price = Column(Float, nullable=False)
     currency = Column(String, default="MAD")
-    tax_rate = Column(Float, default=20.0)
+    tax_rate = Column(Float, default=0.20)
     
     category_id = Column(Integer, ForeignKey("service_categories.id"), nullable=True)
     catalogue_id = Column(Integer, ForeignKey("catalogues.id"), nullable=True)

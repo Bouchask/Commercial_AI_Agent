@@ -67,11 +67,32 @@ class PlannerAgent:
         - For document.generate, ALWAYS omit the "template_name" argument so it uses the system default, or pass exactly "b2b" if required.
         - For 'email.prepare', you MUST provide 'to', 'subject', and 'body' arguments! If 'db.find_or_create_client' is in the plan, you MUST use the placeholder "{{stepN.email}}" for the 'to' argument (where N is the EXACT step ID of the db.find_or_create_client action). NEVER hardcode an email address if a client step exists! Only use a hardcoded email if there is NO client step. You MUST invent an appropriate professional 'subject' and 'body' yourself.
         - SENDING PREVIOUSLY GENERATED QUOTES OR EMAILS TO A NAMED CLIENT:
-          - If the user asks to send an existing quote or email to a named client (e.g. "envoyes devis a yahya qassifi" where intent has "client": "<name>"):
+          - If the user asks to send an existing quote or email to a named client (e.g. "envoyes devis a yahya qassifi" where intent has "client": "<name>") WITHOUT regenerating the quote:
             - The first step MUST be "db.find_or_create_client" with arguments: {"name": "<client name from intent>"}.
             - Then "email.prepare" MUST use "to": "{{stepN.email}}" (where N is the ID of the db.find_or_create_client step), and pass the file path in "attachments". Depends on [N].
             - Then "email.send" with the same arguments, depending on the email.prepare step.
             - CRITICAL: NEVER skip "db.find_or_create_client" and NEVER invent or hallucinate fake emails like "@example.com"! The real client email MUST be retrieved from the database via "db.find_or_create_client".
+        - QUOTE GENERATION OR AMENDMENT WITH EMAIL SENDING:
+          If the plan contains BOTH quote/document generation (utils.prepare_quote_items, db.create_quote, document.generate) AND email sending (email.prepare, email.send):
+          - Step order MUST be:
+            1. db.find_or_create_client (if client in intent)
+            2. utils.prepare_quote_items (with codes, quantities, and discount_percent from intent)
+            3. db.create_quote (with items, total_ht, total_tax, total_ttc from prepare_quote_items step)
+            4. document.generate (with reference_id from create_quote step, items, totals, and document_type)
+            5. google.sheets.append_row
+            6. email.prepare with arguments:
+               "to": "{{step1.email}}",
+               "subject": "Votre devis" (or "Votre facture"),
+               "body": "Bonjour <Name>,\\n\\nVeuillez trouver ci-joint votre document...\\n\\nCordialement,",
+               "attachments": ["{{step4.file_path}}"]
+               depends_on: [step 1, step 4]
+            7. email.send with arguments:
+               "to": "{{step1.email}}",
+               "subject": "Votre devis" (or "Votre facture"),
+               "body": "Bonjour <Name>,\\n\\nVeuillez trouver ci-joint votre document...\\n\\nCordialement,",
+               "attachments": ["{{step4.file_path}}"]
+               depends_on: [step 6]
+          - CRITICAL: In email.prepare, you MUST use "attachments": ["{{stepN.file_path}}"] referencing the newly generated document (from document.generate), NOT an old file from previous context! This ensures the email sends the newly generated document containing the discount!
         - For 'google.calendar.check_availability', you MUST execute this BEFORE 'google.calendar.create_meeting' to find a free slot. Determine a target date (use 'meeting_date' from the Intent if present, otherwise default to Current Date + 10 days) and set 'date_start' to 08:00:00 of that day, and 'date_end' to 18:00:00 of that day (in ISO 8601).
         - For 'google.calendar.create_meeting', use it when the user explicitly requests to schedule or plan a meeting. You must provide a 'title' and 'start_time' (in ISO 8601 format). Calculate the start_time intelligently: Use 'meeting_date' and 'meeting_time' from the Intent if provided. If 'meeting_date' is null, default to the target date (Current Date + 10 days). If 'meeting_time' is null, pick a logical default (e.g. 10:00 AM) but if previous context or the result of check_availability indicates it's busy, pick the next available slot! Ensure correct year and month based on the Current Date. If attendees are provided in the Intent (e.g. 2 client emails), pass them in the 'attendees' argument array!
         - MEETING INVITATIONS TO CLIENTS: When a meeting is created and attendees/clients are specified (e.g. 2 client emails), or when the user asks to send meeting invitations by email:
@@ -93,7 +114,7 @@ class PlannerAgent:
         - The Intent contains an 'actions' array (e.g. ["utils.prepare_quote_items", ...]). You MUST generate a step for EVERY action listed in that array! Do not skip any action listed in the intent.
         - If previous context shows a document was already generated, you should ONLY skip regenerating it IF the quote data (discount, tax, items, client) is EXACTLY the same AND they just want to send the exact same file in the same format.
         - If the Intent contains an AMENDMENT (a different discount, different tax rate, new client, or modified requirements compared to the previous context), you MUST REGENERATE EVERYTHING from scratch (utils.prepare_quote_items, db.create_quote, document.generate, etc.). The old document is obsolete!
-        - If attachments are present in the intent, use them as literal file paths in your tool arguments.
+        - If attachments are present in the intent AND no new document is being generated in this plan, use them as literal file paths in your tool arguments. If a new document is generated, ALWAYS pass "{{stepN.file_path}}" to email.prepare and email.send!
         - Start numbering your steps from {next_step_id}. Do not start from 1 unless {next_step_id} is 1.
         """
 

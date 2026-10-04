@@ -264,3 +264,94 @@ def test_email_prepare_and_send_links_attachments_to_recipient_client(monkeypatc
         if os.path.exists(test_file):
             os.remove(test_file)
 
+def test_tax_rate_normalization_prevents_extreme_tax(monkeypatch):
+    from backend.mcp.utils.tools import prepare_quote_items
+    
+    # Mock get_services to return a service with tax_rate=20.0 (percentage format)
+    monkeypatch.setattr(
+        "backend.mcp.database.tools.get_services",
+        lambda codes=None: [{
+            "id": 100,
+            "code": "SRV-TEST",
+            "name": "analyse bug",
+            "unit_price": 4000.0,
+            "tax_rate": 20.0  # as percentage
+        }]
+    )
+    result = prepare_quote_items(codes=["SRV-TEST"], quantities={"SRV-TEST": 1}, discount_percent=0.15)
+    # 4000 with 15% discount: subtotal HT = 3400.0
+    assert result["total_ht"] == 3400.0
+    # Tax should be 20% of 3400 = 680.0, NOT 68,000!
+    assert round(result["tax"], 2) == 680.0
+    assert round(result["total_ttc"], 2) == 4080.0
+
+def test_planner_amendment_with_email_wires_new_document_attachment():
+    mock_router = MagicMock()
+    mock_router.generate_json.return_value = {
+        "steps": [
+            {
+                "id": 1,
+                "tool": "db.find_or_create_client",
+                "arguments": {"name": "yahya qassif"},
+                "depends_on": []
+            },
+            {
+                "id": 2,
+                "tool": "utils.prepare_quote_items",
+                "arguments": {"codes": ["PACK-MOB", "MAINT-12"], "discount_percent": 0.15},
+                "depends_on": []
+            },
+            {
+                "id": 3,
+                "tool": "db.create_quote",
+                "arguments": {"client_id": "{{step1.id}}", "items": "{{step2.items}}", "total_ht": "{{step2.total_ht}}", "total_tax": "{{step2.tax}}", "total_ttc": "{{step2.total_ttc}}"},
+                "depends_on": [1, 2]
+            },
+            {
+                "id": 4,
+                "tool": "document.generate",
+                "arguments": {"document_type": "invoice", "reference_id": "{{step3.quote_id}}", "client_id": "{{step1.id}}", "items": "{{step2.items}}", "total_ht": "{{step2.total_ht}}", "tax": "{{step2.tax}}", "total_ttc": "{{step2.total_ttc}}"},
+                "depends_on": [3]
+            },
+            {
+                "id": 5,
+                "tool": "email.prepare",
+                "arguments": {"to": "{{step1.email}}", "subject": "Facture", "body": "Bonjour", "attachments": ["{{step4.file_path}}"]},
+                "depends_on": [1, 4]
+            },
+            {
+                "id": 6,
+                "tool": "email.send",
+                "arguments": {"to": "{{step1.email}}", "subject": "Facture", "body": "Bonjour", "attachments": ["{{step4.file_path}}"]},
+                "depends_on": [5]
+            }
+        ]
+    }
+    planner = PlannerAgent(mock_router)
+    intent = {
+        "intent": "create_invoice",
+        "document_type": "invoice",
+        "client": "yahya qassif",
+        "discount_percent": 0.15,
+        "actions": ["db.find_or_create_client", "utils.prepare_quote_items", "db.create_quote", "document.generate", "email.prepare", "email.send"]
+    }
+    available_tools = [
+        {"name": "utils.prepare_quote_items"},
+        {"name": "db.create_quote"},
+        {"name": "document.generate"},
+        {"name": "db.find_or_create_client"},
+        {"name": "email.prepare"},
+        {"name": "email.send"}
+    ]
+    plan = planner.plan(intent=intent, available_tools=available_tools, user_input="ajoute une remise de 15% a devis et envoye facteur a yahya qassif")
+    
+    # Check that prompt contains QUOTE GENERATION OR AMENDMENT WITH EMAIL SENDING instructions
+    call_prompt = mock_router.generate_json.call_args.kwargs["prompt"]
+    assert "QUOTE GENERATION OR AMENDMENT WITH EMAIL SENDING" in planner.system_prompt
+    step_tools = [s["tool"] for s in plan["steps"]]
+    assert "utils.prepare_quote_items" in step_tools
+    assert "document.generate" in step_tools
+    assert "email.prepare" in step_tools
+    assert plan["steps"][4]["arguments"]["attachments"] == ["{{step4.file_path}}"]
+
+

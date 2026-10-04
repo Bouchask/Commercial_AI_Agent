@@ -47,12 +47,22 @@ class PromptEngineerAgent:
         - MEETING ATTENDEES & INVITATIONS: If the user mentions participants, clients, or email addresses for a meeting (e.g. "avec client1@... et client2@..." or "organise une réunion avec 2 clients et envoie l'invitation"), extract their email addresses into the "attendees" array. If invitations or emails are requested, you MUST ALSO include "email.prepare" and "email.send" in the 'actions' array so direct email invitations with the meeting details and link are sent to the clients!
         - Automatic Logging: You MUST add "google.sheets.append_row" to the 'actions' array if the user asks to schedule a meeting, create a quote/invoice, or find/create a client. This ensures everything is logged to the spreadsheet.
         - SENDING PREVIOUSLY GENERATED QUOTES BY EMAIL:
-          If the Previous Context shows a quote/document was already generated, and the user asks to send it via email (e.g. "ok , envoyes devis a yahya qassifi", "envoie le devis à [client]"):
+          ONLY if the user strictly asks to send the existing document WITHOUT any modifications/amendments (e.g. "ok , envoyes devis a yahya qassifi", "envoie le devis à [client]"):
           - DO NOT include quote creation actions (like db.create_quote, document.generate).
           - If a client name is specified in the request (e.g. "yahya qassifi", "client Acme"):
             - Set "client": "<exact client name>".
             - You MUST include "db.find_or_create_client" in the 'actions' array as the FIRST action, before "email.prepare" and "email.send". This is MANDATORY so the agent searches the database for that client and retrieves their registered email address!
           - Then include "email.prepare" and "email.send", and put the previously generated file_path in "attachments".
+        - AMENDMENT COMBINED WITH SENDING (CRITICAL RULE):
+          If the user's request combines ANY modification/amendment with sending (e.g. "ajoute une remise de 15% a devis et envoye facteur a yahya qassif", "ajoute 10% de remise et envoie", "change le client et envoie le devis"):
+          - THIS IS AN AMENDMENT, NOT JUST SENDING! The old document is OBSOLETE and does NOT have the discount or requested changes.
+          - You MUST REGENERATE the document with the requested modification:
+            1. If a client is specified, set "client": "<name>" and include "db.find_or_create_client" as first action.
+            2. Set "discount_percent" to the requested discount (e.g. 0.15 for 15%).
+            3. Set "document_type" according to the request ("invoice" if user says facteur/facture, "quote" if devis).
+            4. Extract all previous services and quantities from Previous Context into "requirements".
+            5. In the 'actions' array, you MUST include: ["db.find_or_create_client" (if client present), "utils.prepare_quote_items", "db.create_quote", "document.generate", "google.sheets.append_row", "email.prepare", "email.send"].
+            6. Set "attachments": [] (empty or null) because a brand new document with the discount will be generated and attached in this turn!
         - CLIENT DETECTION & CREATION:
           - If the user explicitly specifies or mentions ANY client name in their request (e.g. "pour yahya qassifi", "a yahya qassifi", "au client Dupont", "pour l'entreprise Acme") OR if an actual client was established in previous context:
             - You MUST extract the exact client name in the "client" field.
