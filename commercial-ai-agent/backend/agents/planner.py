@@ -6,7 +6,7 @@ class PlannerAgent:
     def __init__(self, router: ModelRouter):
         self.router = router
         self.system_prompt = """You are the Planner for a Commercial AI Agent.
-Generate a dependency-aware JSON execution plan using ONLY the provided tools. Output raw JSON ONLY.
+Generate a dependency-aware JSON execution plan using ONLY the provided tools. Output compact raw JSON ONLY without blank lines or excessive indentation.
 
 JSON Schema:
 {
@@ -124,9 +124,24 @@ CRITICAL Rules:
         prompt = f"Date: {current_date}\nRequest: {user_input}\nContext: {previous_context}\nIntent: {intent_str}\nCatalogue: {catalogue_str}\nTools: {tools_str}\nNext step ID: {next_step_id}"
         
         # We cap completion tokens to stay comfortably within Groq OTPM rate limits
-        return self.router.generate_json(
+        plan = self.router.generate_json(
             capability="commercial_reasoning",
             prompt=prompt,
             system_prompt=self.system_prompt,
-            max_tokens=750
+            max_tokens=900
         )
+
+        # Auto-complete email.send if email.prepare was generated but cut off
+        if isinstance(plan, dict) and "steps" in plan:
+            steps = plan.get("steps", [])
+            step_tools = [s.get("tool") for s in steps]
+            if "email.prepare" in step_tools and "email.send" not in step_tools:
+                prep_step = next(s for s in steps if s.get("tool") == "email.prepare")
+                next_id = max([s.get("id", 0) for s in steps]) + 1
+                steps.append({
+                    "id": next_id,
+                    "tool": "email.send",
+                    "arguments": dict(prep_step.get("arguments", {})),
+                    "depends_on": [prep_step.get("id")]
+                })
+        return plan

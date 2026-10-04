@@ -81,9 +81,9 @@ class GroqProvider(LLMProvider):
     def generate_json(self, prompt: str, model: str, system_prompt: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Generate JSON response using Groq API."""
         content = ""
-        max_tokens = kwargs.pop('max_tokens', None) or kwargs.pop('max_completion_tokens', None) or 750
+        max_tokens = kwargs.pop('max_tokens', None) or kwargs.pop('max_completion_tokens', None) or 900
         # Stay safely below 1000 OTPM for JSON outputs
-        max_completion_tokens = min(int(max_tokens), 750)
+        max_completion_tokens = min(int(max_tokens), 900)
         timeout = kwargs.pop('timeout', 120.0)
 
         json_system = "You must output a valid JSON object. Do not include markdown code blocks or explanations, just the raw JSON."
@@ -130,7 +130,60 @@ class GroqProvider(LLMProvider):
         except Exception as e:
             err_msg = str(e)
             import time
-            # Automatic mitigation for Groq OTPM (429) rate limit: retry with reduced completion tokens
+
+            # 1. Recovery for Groq 400 json_validate_failed (truncated JSON due to token budget)
+            failed_gen = None
+            if hasattr(e, 'body') and isinstance(e.body, dict):
+                failed_gen = e.body.get('error', {}).get('failed_generation')
+            elif hasattr(e, 'response') and hasattr(e.response, 'json'):
+                try:
+                    failed_gen = e.response.json().get('error', {}).get('failed_generation')
+                except Exception:
+                    pass
+            if not failed_gen and 'failed_generation' in err_msg:
+                import re
+                m = re.search(r"'failed_generation':\s*'([^']*)'", err_msg)
+                if m:
+                    try:
+                        failed_gen = m.group(1).encode('utf-8').decode('unicode_escape')
+                    except Exception:
+                        failed_gen = m.group(1)
+
+            if failed_gen:
+                try:
+                    import json_repair
+                    repaired = json_repair.repair_json(failed_gen, return_objects=True)
+                    if isinstance(repaired, dict) and repaired:
+                        logger.warning("Groq hit json_validate_failed: Successfully recovered valid JSON from failed_generation using json_repair.")
+                        return repaired
+                except Exception as repair_err:
+                    logger.warning(f"json_repair could not recover failed_generation: {repair_err}")
+
+            # 2. If 400 json_validate_failed persists without failed_gen, retry without strict response_format
+            if "json_validate_failed" in err_msg or "Failed to generate JSON" in err_msg:
+                logger.warning("Retrying Groq JSON generation without strict schema constraint...")
+                time.sleep(1.0)
+                try:
+                    retry_resp = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        reasoning_effort=settings.GROQ_JSON_REASONING_EFFORT,
+                        temperature=0,
+                        max_completion_tokens=max_completion_tokens,
+                        timeout=timeout
+                    )
+                    raw_content = self._content(retry_resp).strip()
+                    if raw_content.startswith("```json"): raw_content = raw_content[7:]
+                    elif raw_content.startswith("```"): raw_content = raw_content[3:]
+                    if raw_content.endswith("```"): raw_content = raw_content[:-3]
+                    import json_repair
+                    repaired = json_repair.repair_json(raw_content.strip(), return_objects=True)
+                    if isinstance(repaired, dict) and repaired:
+                        return repaired
+                except Exception as fallback_err:
+                    logger.error(f"Fallback generation without strict schema failed: {fallback_err}")
+
+            # 3. Automatic mitigation for Groq OTPM (429) rate limit: retry with reduced completion tokens
             if ("429" in err_msg or "OTPM" in err_msg or "reduce max_tokens" in err_msg) and max_completion_tokens > 350:
                 logger.warning(f"Groq OTPM rate limit hit ({err_msg}). Retrying with max_completion_tokens=350...")
                 time.sleep(1.5)
@@ -152,7 +205,7 @@ class GroqProvider(LLMProvider):
                 except Exception as retry_err:
                     logger.error(f"Groq retry with 350 tokens also failed: {retry_err}")
             
-            # Automatic mitigation for Groq ITPM (413) request too large: retry with compacted prompt
+            # 4. Automatic mitigation for Groq ITPM (413) request too large: retry with compacted prompt
             elif ("413" in err_msg or "ITPM" in err_msg or "Request too large" in err_msg) and len(prompt) > 2000:
                 logger.warning(f"Groq ITPM 413 limit hit. Retrying with compacted prompt...")
                 time.sleep(1.0)
