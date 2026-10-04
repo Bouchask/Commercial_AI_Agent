@@ -152,29 +152,83 @@ class LangGraphOrchestrator:
             interrupt_before=["wait_for_approval"]
         )
 
+    def _build_context(self, state: AgentState) -> str:
+        """Build a comprehensive context including recent chat dialogue and structured execution outputs."""
+        context_parts = []
+        
+        # 1. Recent dialogue from Message table for this thread
+        execution_id = state.get("execution_id")
+        if execution_id:
+            db = SessionLocal()
+            try:
+                from backend.models.execution import Message
+                recent_msgs = db.query(Message).filter(
+                    Message.execution_id == execution_id,
+                    Message.role.in_(["user", "agent"])
+                ).order_by(Message.created_at.desc()).limit(8).all()
+                if recent_msgs:
+                    recent_msgs.reverse()
+                    history_lines = []
+                    for m in recent_msgs:
+                        if m.role == "user" and (m.content or "").strip() == (state.get("user_input") or "").strip():
+                            continue
+                        role_label = "User" if m.role == "user" else "Assistant"
+                        content_snip = (m.content or "").strip()
+                        if len(content_snip) > 400:
+                            content_snip = content_snip[:400] + "..."
+                        history_lines.append(f"{role_label}: {content_snip}")
+                    if history_lines:
+                        context_parts.append("Recent conversation dialogue:\n" + "\n".join(history_lines))
+            except Exception as e:
+                logger.warning(f"Error fetching conversation dialogue: {e}")
+            finally:
+                db.close()
+                
+        # 2. Execution steps results with compact items preservation
+        results = state.get("results", {})
+        if results:
+            step_lines = []
+            for step_id, res in results.items():
+                if res.get("success"):
+                    data = res.get('data', {})
+                    if isinstance(data, dict):
+                        # Ensure quote/service items are NEVER dropped
+                        if "items" in data and isinstance(data["items"], list):
+                            compact = {
+                                "items": [
+                                    {
+                                        "code": it.get("code") or it.get("service_code"),
+                                        "name": it.get("description") or it.get("name"),
+                                        "quantity": it.get("quantity", 1),
+                                        "unit_price": it.get("price") or it.get("unit_price")
+                                    }
+                                    for it in data["items"]
+                                ]
+                            }
+                            for k in ["original_subtotal", "total_ht", "tax", "total_ttc", "discount_amount", "discount_percent_val"]:
+                                if k in data:
+                                    compact[k] = data[k]
+                            data_str = json.dumps(compact)
+                        else:
+                            try:
+                                data_str = json.dumps(data)
+                                if len(data_str) > 1000:
+                                    data_str = data_str[:1000] + "...}"
+                            except Exception:
+                                data_str = '{"status": "success"}'
+                    else:
+                        data_str = str(data)[:300]
+                    step_lines.append(f"- Step {step_id}: {data_str}")
+            if step_lines:
+                context_parts.append("Recently executed actions and results:\n" + "\n".join(step_lines[-5:]))
+                
+        return "\n\n".join(context_parts)
+
     def _node_analyze(self, state: AgentState):
         if state.get("intent"):
             return state
             
-        previous_context = ""
-        results = state.get("results", {})
-        if results:
-            context_lines = []
-            for step_id, res in results.items():
-                if res.get("success"):
-                    data = res.get('data', {})
-                    try:
-                        data_str = json.dumps(data)
-                        if len(data_str) > 500:
-                            data_str = '{"status": "success", "note": "Data omitted due to length"}'
-                    except Exception:
-                        data_str = '{"status": "success"}'
-                    context_lines.append(f"- Step {step_id}: {data_str}")
-            
-            # Keep only the last 5 steps to save tokens
-            if len(context_lines) > 5:
-                context_lines = context_lines[-5:]
-            previous_context = "Here is what was accomplished recently:\n" + "\n".join(context_lines) + "\n"
+        previous_context = self._build_context(state)
                     
         user_info = ""
         try:
@@ -195,27 +249,9 @@ class LangGraphOrchestrator:
             
         available_tools = registry.get_planner_tools()
         
-        previous_context = ""
+        previous_context = self._build_context(state)
         results = state.get("results", {})
-        next_step_id = 1
-        if results:
-            next_step_id = max(results.keys()) + 1
-            context_lines = []
-            for step_id, res in results.items():
-                if res.get("success"):
-                    data = res.get('data', {})
-                    try:
-                        data_str = json.dumps(data)
-                        if len(data_str) > 500:
-                            data_str = '{"status": "success", "note": "Data omitted due to length"}'
-                    except Exception:
-                        data_str = '{"status": "success"}'
-                    context_lines.append(f"- Step {step_id}: {data_str}")
-            
-            # Keep only the last 5 steps to save tokens
-            if len(context_lines) > 5:
-                context_lines = context_lines[-5:]
-            previous_context = "Here is what was accomplished recently:\n" + "\n".join(context_lines) + "\n"
+        next_step_id = (max(results.keys()) + 1) if results else 1
                     
         plan = self.planner.plan(state["intent"], available_tools, previous_context, next_step_id, state["user_input"])
         state["plan"] = plan

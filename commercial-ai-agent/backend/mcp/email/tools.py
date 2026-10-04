@@ -59,9 +59,17 @@ def _link_attachments_to_recipient(to_email: str, attachment_paths: List[str], m
         
         db = SessionLocal()
         try:
-            client = db.query(Client).filter(Client.email.ilike(to_email.strip())).first()
+            from backend.mcp.google_auth import get_current_user
+            user = get_current_user()
+            query = db.query(Client).filter(Client.email.ilike(to_email.strip()))
+            client = None
+            if user:
+                client = query.filter(Client.owner_user_id == user.id).first()
+            if not client:
+                client = query.first()
             if not client:
                 return
+
             for path in attachment_paths:
                 resolved_path = os.path.realpath(path)
                 doc = db.query(Document).filter(Document.filepath == resolved_path).first()
@@ -69,13 +77,27 @@ def _link_attachments_to_recipient(to_email: str, attachment_paths: List[str], m
                     fname = os.path.basename(resolved_path)
                     doc = db.query(Document).filter(Document.filename == fname).first()
                 if doc:
-                    if doc.client_id != client.id:
+                    # Only assign if document has no client or placeholder client
+                    should_reassign = False
+                    if not doc.client_id:
+                        should_reassign = True
+                    else:
+                        curr_c = db.get(Client, doc.client_id)
+                        if not curr_c or curr_c.name in ("Client", "Client Standard", None):
+                            should_reassign = True
+                    
+                    if should_reassign:
                         doc.client_id = client.id
+
                     if doc.reference_id and doc.document_type == "quote":
                         quote = db.query(Quote).filter(Quote.id == doc.reference_id).first()
                         if quote:
-                            if quote.client_id != client.id:
+                            if not quote.client_id:
                                 quote.client_id = client.id
+                            else:
+                                q_client = db.get(Client, quote.client_id)
+                                if not q_client or q_client.name in ("Client", "Client Standard", None):
+                                    quote.client_id = client.id
                             if mark_sent and quote.status != "SENT":
                                 quote.status = "SENT"
             db.commit()

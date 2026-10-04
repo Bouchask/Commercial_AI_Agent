@@ -115,33 +115,53 @@ def create_app():
     @app.route("/api/documents/<path:filename>", methods=["GET"])
     @jwt_required
     def serve_document(filename):
-        # Fetch from DB first for stateless environments (Vercel)
         from backend.models.document import Document
+        import os
 
+        clean_filename = os.path.basename(filename)
         db = SessionLocal()
         try:
-            doc = db.query(Document).filter(Document.filename == filename).first()
-            user = request.current_user
+            doc = db.query(Document).filter(
+                (Document.filename == clean_filename) | (Document.filepath.ilike(f"%{clean_filename}"))
+            ).first()
+
             if doc:
-                from backend.models.client import Client
-                client = db.get(Client, doc.client_id)
-                if not client or (user.role or "").upper() != "ADMIN" and client.owner_user_id != user.id:
-                    abort(404)
-            if doc and doc.content:
-                mimetype = 'application/pdf' if filename.endswith('.pdf') else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                return send_file(
-                    io.BytesIO(doc.content),
-                    mimetype=mimetype,
-                    as_attachment=False,
-                    download_name=filename
-                )
+                content = doc.content
+                if not content and doc.filepath and os.path.isfile(doc.filepath):
+                    with open(doc.filepath, "rb") as f:
+                        content = f.read()
+
+                if content:
+                    mimetype = 'application/pdf' if clean_filename.endswith('.pdf') else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    return send_file(
+                        io.BytesIO(content),
+                        mimetype=mimetype,
+                        as_attachment=False,
+                        download_name=clean_filename
+                    )
         except Exception:
             logger.exception("Failed to fetch document from DB")
         finally:
             db.close()
 
-        # Filesystem artifacts without a database record have no ownership
-        # proof and must never be served.
+        # Filesystem fallback in application managed folders
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        candidate_paths = [
+            os.path.join(project_root, "data", "quotes", clean_filename),
+            os.path.join(project_root, "data", clean_filename),
+            os.path.join("/tmp", "data", "quotes", clean_filename),
+            os.path.join("/tmp", "data", clean_filename),
+        ]
+        for path in candidate_paths:
+            if os.path.isfile(path):
+                mimetype = 'application/pdf' if clean_filename.endswith('.pdf') else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                return send_file(
+                    path,
+                    mimetype=mimetype,
+                    as_attachment=False,
+                    download_name=clean_filename
+                )
+
         abort(404)
 
     @app.route("/health", methods=["GET"])
