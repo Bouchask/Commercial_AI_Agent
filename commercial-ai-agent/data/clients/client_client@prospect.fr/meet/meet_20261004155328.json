@@ -1,0 +1,17 @@
+{
+    "id": "meet_87a2f62e91",
+    "title": "Point Strat\u00e9gique & Offre Commerciale",
+    "description": "Pr\u00e9sentation de la proposition",
+    "start_time": "2026-10-20T14:00:00Z",
+    "end_time": "2026-10-20T15:00:00+00:00",
+    "active_from": "2026-10-20T13:45:00+00:00",
+    "active_until": "2026-10-20T15:30:00+00:00",
+    "attendees": [
+        "client@prospect.fr",
+        "directeur@partner.com"
+    ],
+    "event_id": "gcal_evt_9988",
+    "calendar_link": "https://calendar.google.com/event?eid=gcal_evt_9988",
+    "meet_url": "https://meet.google.com/abc-defg-hij",
+    "time_locked_room_url": "/api/meet/meet_87a2f62e91"
+}
