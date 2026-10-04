@@ -773,16 +773,16 @@ function SheetsPanel({ spreadsheetId, user }) {
       ) : (
         <div className="glass-panel flex-1 p-0 flex flex-col overflow-hidden">
           {/* Tab bar & Search */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-md-outline-variant/30 bg-md-surface-container-high/50 p-3">
-            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border bg-bg-elevated/70 backdrop-blur-md p-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
               {Object.keys(data || {}).map(sheetName => (
               <button
                 key={sheetName}
                 onClick={() => setActiveSheet(sheetName)}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] active:scale-95 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 active:scale-95 ${
                   activeSheet === sheetName 
-                    ? "bg-md-secondary-container text-md-on-secondary-container" 
-                    : "text-md-on-surface-variant hover:bg-md-primary/10"
+                    ? "bg-gradient-to-r from-accent-1 to-accent-2 text-white shadow-md shadow-accent-1/25" 
+                    : "text-text-secondary hover:text-text-primary hover:bg-white/5 border border-transparent"
                 }`}
               >
                 {sheetName}
@@ -791,32 +791,32 @@ function SheetsPanel({ spreadsheetId, user }) {
             </div>
             
             <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-md-on-surface-variant/50" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-muted" />
               <input
                 type="text"
                 placeholder="Rechercher..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-md-outline-variant/30 rounded-full outline-none focus:border-md-primary transition-colors"
+                className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-bg-card border border-border text-text-primary placeholder:text-text-muted outline-none focus:border-accent-1/50 focus:ring-1 focus:ring-accent-1/20 transition-all"
               />
             </div>
           </div>
           
           {/* Table */}
-          <div className="flex-1 overflow-auto p-4 bg-white">
+          <div className="flex-1 overflow-auto p-4 bg-bg-base/40">
             {activeSheet && data[activeSheet] && data[activeSheet].length > 0 ? (
-              <div className="inline-block min-w-full align-middle">
-                <table className="min-w-full divide-y divide-md-outline-variant/30">
-                  <thead className="sticky top-0 bg-white shadow-sm z-10">
+              <div className="inline-block min-w-full align-middle rounded-xl border border-border overflow-hidden bg-bg-card/70 shadow-lg shadow-black/20">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="sticky top-0 bg-bg-elevated/95 backdrop-blur-md shadow-sm z-10">
                     <tr>
                       {data[activeSheet][0].map((header, idx) => (
-                        <th key={idx} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-md-primary bg-md-surface-container-high/30 whitespace-nowrap">
+                        <th key={idx} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-accent-1 whitespace-nowrap border-b border-border">
                           {header}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-md-outline-variant/10">
+                  <tbody className="divide-y divide-border/60">
                     {data[activeSheet].slice(1)
                       .filter(row => {
                         if (!searchTerm) return true;
@@ -827,10 +827,10 @@ function SheetsPanel({ spreadsheetId, user }) {
                       <tr 
                         key={rowIdx} 
                         onClick={() => setSelectedRow(row)}
-                        className="hover:bg-md-primary/5 transition-colors duration-200 cursor-pointer"
+                        className="hover:bg-white/[0.04] transition-colors duration-150 cursor-pointer group"
                       >
                         {data[activeSheet][0].map((_, colIdx) => (
-                          <td key={colIdx} className="px-4 py-3 text-sm text-md-on-surface truncate max-w-[150px] sm:max-w-[250px] md:max-w-[350px]">
+                          <td key={colIdx} className="px-4 py-3 text-sm text-text-primary group-hover:text-white truncate max-w-[150px] sm:max-w-[250px] md:max-w-[350px]">
                             {row[colIdx] || ''}
                           </td>
                         ))}
@@ -840,7 +840,7 @@ function SheetsPanel({ spreadsheetId, user }) {
                 </table>
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-md-on-surface-variant text-sm">
+              <div className="h-full flex items-center justify-center text-text-muted text-sm">
                 Cette feuille est vide.
               </div>
             )}
@@ -854,36 +854,41 @@ function SheetsPanel({ spreadsheetId, user }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                  className="absolute inset-0 bg-black/70 backdrop-blur-md"
                   onClick={() => setSelectedRow(null)}
                 />
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                  className="relative w-full max-w-2xl max-h-[90vh] bg-md-surface rounded-2xl shadow-xl flex flex-col overflow-hidden border border-md-outline-variant/30"
+                  className="relative w-full max-w-2xl max-h-[90vh] bg-bg-card rounded-2xl shadow-2xl shadow-black/80 flex flex-col overflow-hidden border border-border"
                 >
-                  <div className="flex items-center justify-between p-4 sm:p-6 border-b border-md-outline-variant/30 bg-md-surface-container-low">
+                  <div className="flex items-center justify-between p-5 sm:p-6 border-b border-border bg-bg-elevated/80">
                     <div>
-                      <h3 className="text-xl font-medium text-md-on-surface">Détails de l'enregistrement</h3>
-                      <p className="text-sm text-md-on-surface-variant mt-1">Feuille : <span className="font-medium text-md-primary">{activeSheet}</span></p>
+                      <h3 className="text-xl font-semibold text-text-primary">Détails de l'enregistrement</h3>
+                      <p className="text-xs text-text-secondary mt-1 flex items-center gap-1.5">
+                        Feuille : 
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-accent-1/15 text-accent-1 border border-accent-1/30">
+                          {activeSheet}
+                        </span>
+                      </p>
                     </div>
                     <button 
                       onClick={() => setSelectedRow(null)}
-                      className="p-2 rounded-full hover:bg-md-surface-container-high transition-colors text-md-on-surface-variant"
+                      className="p-2 rounded-full hover:bg-white/10 transition-colors text-text-secondary hover:text-text-primary"
                     >
                       <X className="size-5" />
                     </button>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <div className="flex-1 overflow-y-auto p-5 sm:p-6 bg-bg-card">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       {data[activeSheet][0].map((header, idx) => {
                         const cellValue = selectedRow[idx] || '—';
                         return (
-                          <div key={idx} className="flex flex-col gap-1.5 p-3 rounded-xl hover:bg-md-primary/5 transition-colors border border-transparent hover:border-md-outline-variant/10">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-md-primary/70">{header}</span>
-                            <span className="text-sm text-md-on-surface break-words whitespace-pre-wrap leading-relaxed">{cellValue}</span>
+                          <div key={idx} className="flex flex-col gap-1.5 p-3.5 rounded-xl bg-bg-elevated/70 border border-border/80 hover:border-accent-1/30 hover:bg-bg-elevated transition-all">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-accent-1">{header}</span>
+                            <span className="text-sm text-text-primary break-words whitespace-pre-wrap leading-relaxed font-medium">{cellValue}</span>
                           </div>
                         );
                       })}

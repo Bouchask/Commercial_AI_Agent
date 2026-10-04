@@ -69,18 +69,18 @@ export function ExcelViewer({ url, title }) {
   if (data.length === 0) return <div className="p-4 text-md-on-surface-variant text-xs flex items-center justify-center h-full">Document vide.</div>;
 
   return (
-    <div className="flex flex-col h-full bg-md-surface-container-low overflow-hidden rounded-2xl border border-md-outline-variant/30">
+    <div className="flex flex-col h-full bg-bg-card overflow-hidden rounded-2xl border border-border">
       {/* Header / Tabs */}
       {sheets.length > 1 && (
-        <div className="flex items-center gap-1 border-b border-md-outline-variant/30 bg-md-surface p-2 overflow-x-auto">
+        <div className="flex items-center gap-1.5 border-b border-border bg-bg-elevated/80 p-2.5 overflow-x-auto">
           {sheets.map(sheet => (
             <button
               key={sheet}
               onClick={() => changeSheet(sheet)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 activeSheet === sheet 
-                  ? "bg-md-primary/10 text-md-primary" 
-                  : "text-md-on-surface-variant hover:bg-md-primary/5"
+                  ? "bg-accent-1 text-white shadow-sm shadow-accent-1/30" 
+                  : "text-text-secondary hover:text-text-primary hover:bg-white/5"
               }`}
             >
               {sheet}
@@ -90,7 +90,7 @@ export function ExcelViewer({ url, title }) {
       )}
       
       {/* Table Content */}
-      <div className="flex-1 overflow-auto bg-white p-2 sm:p-4">
+      <div className="flex-1 overflow-auto bg-bg-card p-2 sm:p-4">
         <table className="min-w-full border-collapse">
           <tbody>
             {data.map((row, rowIndex) => {
@@ -98,7 +98,7 @@ export function ExcelViewer({ url, title }) {
               if (!row || row.every(c => c === "" || c === null || c === undefined)) return null;
               
               return (
-                <tr key={rowIndex} className="border-b border-md-outline-variant/10 last:border-0 hover:bg-md-primary/5">
+                <tr key={rowIndex} className="border-b border-border/50 last:border-0 hover:bg-white/[0.03]">
                   {row.map((cell, colIndex) => {
                     // Determine if this cell looks like a header (e.g. bold, top rows)
                     const isHeaderRow = rowIndex < 2 || (rowIndex === 7 && cell !== ""); // Heuristic for our invoice template
@@ -109,10 +109,10 @@ export function ExcelViewer({ url, title }) {
                       <td 
                         key={colIndex} 
                         className={`
-                          px-3 py-2 text-sm whitespace-nowrap border-r border-md-outline-variant/10 last:border-r-0
-                          ${isTitle ? 'text-lg font-bold text-md-primary' : ''}
-                          ${isHeaderRow ? 'font-medium text-md-on-surface' : 'text-md-on-surface-variant'}
-                          ${isTotal ? 'font-bold text-md-primary bg-md-primary/5' : ''}
+                          px-3 py-2 text-sm whitespace-nowrap border-r border-border/30 last:border-r-0
+                          ${isTitle ? 'text-lg font-bold text-accent-1' : ''}
+                          ${isHeaderRow ? 'font-semibold text-text-primary bg-bg-elevated/40' : 'text-text-secondary'}
+                          ${isTotal ? 'font-bold text-accent-1 bg-accent-1/10' : ''}
                           ${typeof cell === 'number' ? 'text-right' : 'text-left'}
                         `}
                       >
