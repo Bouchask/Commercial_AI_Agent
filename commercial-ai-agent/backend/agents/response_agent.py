@@ -29,21 +29,16 @@ class ResponseAgent:
         """
         Generates a professional text response to the user based on tool execution results.
         """
-        results_str = json.dumps(execution_results, indent=2)
+        results_str = json.dumps(execution_results, separators=(',', ':'))
+        if len(results_str) > 2500:
+            results_str = results_str[:2500] + "...}"
         
-        prompt = f"""
-        User Request:
-        {user_request}
+        prompt = f"User Request: {user_request}\n\nExecution Results:\n{results_str}\n\nGenerate the concise final response to the user."
         
-        Execution Results:
-        {results_str}
-        
-        Generate the final response to the user based on these results.
-        """
-        
-        # We use general_multimodal or commercial_reasoning capability for writing professional responses
+        # We use commercial_reasoning capability for writing professional responses, capping tokens to avoid OTPM rate limits
         return self.router.generate(
             capability="commercial_reasoning",
             prompt=prompt,
-            system_prompt=self.system_prompt
+            system_prompt=self.system_prompt,
+            max_tokens=650
         )

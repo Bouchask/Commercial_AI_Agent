@@ -37,19 +37,38 @@ class GroqProvider(LLMProvider):
 
     def generate(self, prompt: str, model: str, system_prompt: Optional[str] = None, **kwargs) -> str:
         """Generate text response using Groq API."""
+        max_tokens = kwargs.pop('max_tokens', None) or kwargs.pop('max_completion_tokens', None) or settings.GROQ_MAX_COMPLETION_TOKENS
+        # Groq on-demand tier caps OTPM at 1000. Keep max_completion_tokens comfortably under 900
+        max_completion_tokens = min(int(max_tokens), 900)
+        messages = self._format_messages(prompt, system_prompt)
+        timeout = kwargs.pop('timeout', 120.0)
+
         try:
-            messages = self._format_messages(prompt, system_prompt)
-            timeout = kwargs.pop('timeout', 120.0)
-            
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
                 reasoning_effort=settings.GROQ_REASONING_EFFORT,
-                max_completion_tokens=settings.GROQ_MAX_COMPLETION_TOKENS,
+                max_completion_tokens=max_completion_tokens,
                 timeout=timeout
             )
             return self._content(response)
         except Exception as e:
+            err_msg = str(e)
+            if ("429" in err_msg or "OTPM" in err_msg or "reduce max_tokens" in err_msg) and max_completion_tokens > 350:
+                logger.warning(f"Groq generate hit OTPM rate limit: {err_msg}. Retrying with 400 completion tokens...")
+                import time
+                time.sleep(1.5)
+                try:
+                    resp = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        reasoning_effort=settings.GROQ_REASONING_EFFORT,
+                        max_completion_tokens=400,
+                        timeout=timeout
+                    )
+                    return self._content(resp)
+                except Exception:
+                    pass
             logger.error(f"Groq generate error: {str(e)}")
             raise LLMError(
                 message=f"Groq generation failed: {str(e)}",
@@ -62,16 +81,20 @@ class GroqProvider(LLMProvider):
     def generate_json(self, prompt: str, model: str, system_prompt: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Generate JSON response using Groq API."""
         content = ""
-        try:
-            json_system = "You must output a valid JSON object. Do not include markdown code blocks or explanations, just the raw JSON."
-            if system_prompt:
-                system_prompt = f"{system_prompt}\n\n{json_system}"
-            else:
-                system_prompt = json_system
-                
-            messages = self._format_messages(prompt, system_prompt)
-            timeout = kwargs.pop('timeout', 120.0)
+        max_tokens = kwargs.pop('max_tokens', None) or kwargs.pop('max_completion_tokens', None) or 750
+        # Stay safely below 1000 OTPM for JSON outputs
+        max_completion_tokens = min(int(max_tokens), 750)
+        timeout = kwargs.pop('timeout', 120.0)
+
+        json_system = "You must output a valid JSON object. Do not include markdown code blocks or explanations, just the raw JSON."
+        if system_prompt:
+            eff_system_prompt = f"{system_prompt}\n\n{json_system}"
+        else:
+            eff_system_prompt = json_system
             
+        messages = self._format_messages(prompt, eff_system_prompt)
+
+        try:
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -80,13 +103,11 @@ class GroqProvider(LLMProvider):
                 reasoning_effort=settings.GROQ_JSON_REASONING_EFFORT,
                 response_format={"type": "json_object"},
                 temperature=0,
-                max_completion_tokens=settings.GROQ_MAX_COMPLETION_TOKENS,
+                max_completion_tokens=max_completion_tokens,
                 timeout=timeout
             )
             
             content = self._content(response)
-            
-            # Clean markdown JSON block if present
             content = content.strip()
             if content.startswith("```json"):
                 content = content[7:]
@@ -107,6 +128,55 @@ class GroqProvider(LLMProvider):
                 original_error=e
             )
         except Exception as e:
+            err_msg = str(e)
+            import time
+            # Automatic mitigation for Groq OTPM (429) rate limit: retry with reduced completion tokens
+            if ("429" in err_msg or "OTPM" in err_msg or "reduce max_tokens" in err_msg) and max_completion_tokens > 350:
+                logger.warning(f"Groq OTPM rate limit hit ({err_msg}). Retrying with max_completion_tokens=350...")
+                time.sleep(1.5)
+                try:
+                    retry_resp = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        reasoning_effort=settings.GROQ_JSON_REASONING_EFFORT,
+                        response_format={"type": "json_object"},
+                        temperature=0,
+                        max_completion_tokens=350,
+                        timeout=timeout
+                    )
+                    retry_content = self._content(retry_resp).strip()
+                    if retry_content.startswith("```json"): retry_content = retry_content[7:]
+                    elif retry_content.startswith("```"): retry_content = retry_content[3:]
+                    if retry_content.endswith("```"): retry_content = retry_content[:-3]
+                    return json.loads(retry_content.strip())
+                except Exception as retry_err:
+                    logger.error(f"Groq retry with 350 tokens also failed: {retry_err}")
+            
+            # Automatic mitigation for Groq ITPM (413) request too large: retry with compacted prompt
+            elif ("413" in err_msg or "ITPM" in err_msg or "Request too large" in err_msg) and len(prompt) > 2000:
+                logger.warning(f"Groq ITPM 413 limit hit. Retrying with compacted prompt...")
+                time.sleep(1.0)
+                try:
+                    trimmed_prompt = prompt[:2000] + "\n[Context trimmed for token limit]"
+                    trimmed_sys = eff_system_prompt[:1500] if eff_system_prompt else None
+                    trimmed_msgs = self._format_messages(trimmed_prompt, trimmed_sys)
+                    retry_resp = self.client.chat.completions.create(
+                        model=model,
+                        messages=trimmed_msgs,
+                        reasoning_effort=settings.GROQ_JSON_REASONING_EFFORT,
+                        response_format={"type": "json_object"},
+                        temperature=0,
+                        max_completion_tokens=350,
+                        timeout=timeout
+                    )
+                    retry_content = self._content(retry_resp).strip()
+                    if retry_content.startswith("```json"): retry_content = retry_content[7:]
+                    elif retry_content.startswith("```"): retry_content = retry_content[3:]
+                    if retry_content.endswith("```"): retry_content = retry_content[:-3]
+                    return json.loads(retry_content.strip())
+                except Exception as retry_err:
+                    logger.error(f"Groq retry with compacted prompt failed: {retry_err}")
+
             logger.error(f"Groq generate_json error: {str(e)}")
             raise LLMError(
                 message=f"Groq JSON generation failed: {str(e)}",

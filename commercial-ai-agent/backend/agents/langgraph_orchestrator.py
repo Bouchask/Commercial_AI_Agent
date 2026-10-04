@@ -153,10 +153,10 @@ class LangGraphOrchestrator:
         )
 
     def _build_context(self, state: AgentState) -> str:
-        """Build a comprehensive context including recent chat dialogue and structured execution outputs."""
+        """Build a compact context including recent chat dialogue and structured execution outputs."""
         context_parts = []
         
-        # 1. Recent dialogue from Message table for this thread
+        # 1. Recent dialogue from Message table for this thread (compact to save tokens)
         execution_id = state.get("execution_id")
         if execution_id:
             db = SessionLocal()
@@ -165,7 +165,7 @@ class LangGraphOrchestrator:
                 recent_msgs = db.query(Message).filter(
                     Message.execution_id == execution_id,
                     Message.role.in_(["user", "agent"])
-                ).order_by(Message.created_at.desc()).limit(8).all()
+                ).order_by(Message.created_at.desc()).limit(4).all()
                 if recent_msgs:
                     recent_msgs.reverse()
                     history_lines = []
@@ -173,18 +173,18 @@ class LangGraphOrchestrator:
                         if m.role == "user" and (m.content or "").strip() == (state.get("user_input") or "").strip():
                             continue
                         role_label = "User" if m.role == "user" else "Assistant"
-                        content_snip = (m.content or "").strip()
-                        if len(content_snip) > 400:
-                            content_snip = content_snip[:400] + "..."
+                        content_snip = (m.content or "").strip().replace("\n", " ")
+                        if len(content_snip) > 180:
+                            content_snip = content_snip[:180] + "..."
                         history_lines.append(f"{role_label}: {content_snip}")
                     if history_lines:
-                        context_parts.append("Recent conversation dialogue:\n" + "\n".join(history_lines))
+                        context_parts.append("Recent dialogue:\n" + "\n".join(history_lines))
             except Exception as e:
                 logger.warning(f"Error fetching conversation dialogue: {e}")
             finally:
                 db.close()
                 
-        # 2. Execution steps results with compact items preservation
+        # 2. Execution steps results with compact items preservation (last 3 steps)
         results = state.get("results", {})
         if results:
             step_lines = []
@@ -192,35 +192,35 @@ class LangGraphOrchestrator:
                 if res.get("success"):
                     data = res.get('data', {})
                     if isinstance(data, dict):
-                        # Ensure quote/service items are NEVER dropped
+                        # Ensure quote/service items are preserved compactly
                         if "items" in data and isinstance(data["items"], list):
                             compact = {
                                 "items": [
                                     {
                                         "code": it.get("code") or it.get("service_code"),
                                         "name": it.get("description") or it.get("name"),
-                                        "quantity": it.get("quantity", 1),
-                                        "unit_price": it.get("price") or it.get("unit_price")
+                                        "qty": it.get("quantity", 1),
+                                        "price": it.get("price") or it.get("unit_price")
                                     }
                                     for it in data["items"]
                                 ]
                             }
-                            for k in ["original_subtotal", "total_ht", "tax", "total_ttc", "discount_amount", "discount_percent_val"]:
+                            for k in ["total_ht", "tax", "total_ttc", "discount_amount", "discount_percent_val"]:
                                 if k in data:
                                     compact[k] = data[k]
-                            data_str = json.dumps(compact)
+                            data_str = json.dumps(compact, separators=(',', ':'))
                         else:
                             try:
-                                data_str = json.dumps(data)
-                                if len(data_str) > 1000:
-                                    data_str = data_str[:1000] + "...}"
+                                data_str = json.dumps(data, separators=(',', ':'))
+                                if len(data_str) > 250:
+                                    data_str = data_str[:250] + "...}"
                             except Exception:
-                                data_str = '{"status": "success"}'
+                                data_str = '{"status":"ok"}'
                     else:
-                        data_str = str(data)[:300]
+                        data_str = str(data)[:150]
                     step_lines.append(f"- Step {step_id}: {data_str}")
             if step_lines:
-                context_parts.append("Recently executed actions and results:\n" + "\n".join(step_lines[-5:]))
+                context_parts.append("Recently executed actions:\n" + "\n".join(step_lines[-3:]))
                 
         return "\n\n".join(context_parts)
 

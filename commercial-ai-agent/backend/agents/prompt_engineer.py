@@ -88,5 +88,6 @@ class PromptEngineerAgent:
         return self.router.generate_json(
             capability="commercial_reasoning",
             prompt=prompt,
-            system_prompt=self.system_prompt
+            system_prompt=self.system_prompt,
+            max_tokens=600
         )

@@ -153,19 +153,32 @@ class ModelRouter:
             
             except Exception as e:
                 last_error = e
+                err_str = str(e)
                 logger.warning(
-                    f"LLM call failed: {str(e)}",
-                    extra={"extra_fields": {"attempt": attempt + 1, "error": str(e)}}
+                    f"LLM call failed: {err_str}",
+                    extra={"extra_fields": {"attempt": attempt + 1, "error": err_str}}
                 )
                 
                 if attempt == 0 and len(providers) > 1:
                     logger.info("Primary LLM provider failed; trying fallback provider")
                 
+                # Mitigate 429 OTPM or 413 ITPM for next attempt
+                if "429" in err_str or "OTPM" in err_str or "rate_limit" in err_str.lower():
+                    if "max_tokens" in call_kwargs:
+                        call_kwargs["max_tokens"] = max(250, int(call_kwargs["max_tokens"] * 0.7))
+                    sleep_time = max(self.retry_delay_sec * (2 ** attempt), 2.0)
+                elif "413" in err_str or "ITPM" in err_str or "Request too large" in err_str:
+                    if "prompt" in call_kwargs and len(call_kwargs["prompt"]) > 2000:
+                        call_kwargs["prompt"] = call_kwargs["prompt"][:2000] + "\n[Context compacted]"
+                    sleep_time = max(self.retry_delay_sec * (2 ** attempt), 1.0)
+                else:
+                    sleep_time = self.retry_delay_sec * (2 ** attempt)
+
                 if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay_sec * (2 ** attempt))
+                    time.sleep(sleep_time)
                 else:
                     raise LLMError(
-                        message=f"LLM request failed after {self.max_retries} attempts: {str(e)}",
+                        message=f"LLM request failed after {self.max_retries} attempts: {err_str}",
                         error_code=ErrorCode.LLM_UNAVAILABLE,
                         model=call_kwargs.get("model"),
                         provider=type(provider).__name__,
@@ -183,7 +196,7 @@ class ModelRouter:
         kwargs["_capability"] = capability
         return self._call_with_retry(method_name, **kwargs)
 
-    def generate(self, capability: str, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def generate(self, capability: str, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
         """
         Generate text response from LLM.
         
@@ -199,10 +212,11 @@ class ModelRouter:
             "generate",
             capability,
             prompt=prompt,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            **kwargs
         )
 
-    def generate_json(self, capability: str, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def generate_json(self, capability: str, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """
         Generate JSON response from LLM.
         
@@ -220,7 +234,8 @@ class ModelRouter:
                 "generate_json",
                 capability,
                 prompt=prompt,
-                system_prompt=system_prompt
+                system_prompt=system_prompt,
+                **kwargs
             )
             
             # Validate result is dict
@@ -242,7 +257,7 @@ class ModelRouter:
                 original_error=e
             )
 
-    def generate_with_tools(self, capability: str, prompt: str, tools: list, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def generate_with_tools(self, capability: str, prompt: str, tools: list, system_prompt: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """
         Generate response with tool calling.
         
